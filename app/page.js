@@ -60,6 +60,14 @@ function FileUpload({ onFileReady, uploadedFile, onClear }) {
     if (!file) return;
     setProcessing(true);
     try {
+      // Check file size (max 25MB for PDF, 10MB for text)
+      const maxSize = 25 * 1024 * 1024; // 25MB
+      if (file.size > maxSize) {
+        alert(`File troppo grande (${(file.size / 1048576).toFixed(1)} MB). Il limite è 25 MB. Prova a comprimere il PDF.`);
+        setProcessing(false);
+        return;
+      }
+
       const isPdf = file.type === "application/pdf";
       const isText = file.type.startsWith("text/") || [".txt", ".md", ".csv", ".rtf"].some(ext => file.name.toLowerCase().endsWith(ext));
 
