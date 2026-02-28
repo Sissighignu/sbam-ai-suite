@@ -1,13 +1,31 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { NextResponse } from "next/server";
 
+// Allow larger request bodies for PDF uploads (up to 30MB)
+export const config = {
+  api: {
+    bodyParser: {
+      sizeLimit: '30mb',
+    },
+  },
+};
+
+// For App Router: increase max duration for large PDF processing
+export const maxDuration = 60;
+
 const client = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
 
 export async function POST(request) {
   try {
-    const body = await request.json();
+    let body;
+    try {
+      body = await request.json();
+    } catch (parseErr) {
+      return NextResponse.json({ error: "Request body troppo grande o non valido. Prova con un PDF più piccolo (max 25MB)." }, { status: 413 });
+    }
+
     const { system, message, file } = body;
     // file = { base64, mediaType, fileName } (optional)
 
