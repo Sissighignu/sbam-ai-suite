@@ -11,14 +11,12 @@ const MUTED = "#666666";
 const TEXT = "#e0e0e0";
 
 // ─── Secure API call through our backend ───
-async function callAI(system, message, file = null) {
+async function callAI(system, message) {
   try {
-    const body = { system, message };
-    if (file) body.file = file;
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ system, message }),
     });
     const data = await res.json();
     if (data.error) return `Errore: ${data.error}`;
@@ -56,30 +54,68 @@ function FileUpload({ onFileReady, uploadedFile, onClear }) {
 
   const ACCEPTED = ".pdf,.txt,.md,.csv,.doc,.docx,.pptx,.rtf";
 
+  // Extract text from PDF using pdf.js (loaded from CDN)
+  const extractPdfText = async (file) => {
+    // Dynamically load pdf.js if not loaded
+    if (!window.pdfjsLib) {
+      await new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs";
+        script.type = "module";
+        // Use the global build instead
+        const script2 = document.createElement("script");
+        script2.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+        script2.onload = resolve;
+        script2.onerror = reject;
+        document.head.appendChild(script2);
+      });
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    }
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    const pages = [];
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const text = content.items.map((item) => item.str).join(" ");
+      if (text.trim()) pages.push(`[Pagina ${i}]\n${text}`);
+    }
+    return pages.join("\n\n");
+  };
+
   const processFile = async (file) => {
     if (!file) return;
     setProcessing(true);
     try {
-      // Check file size (max 25MB for PDF, 10MB for text)
-      const maxSize = 25 * 1024 * 1024; // 25MB
+      const maxSize = 50 * 1024 * 1024; // 50MB
       if (file.size > maxSize) {
-        alert(`File troppo grande (${(file.size / 1048576).toFixed(1)} MB). Il limite è 25 MB. Prova a comprimere il PDF.`);
+        alert(`File troppo grande (${(file.size / 1048576).toFixed(1)} MB). Il limite è 50 MB.`);
         setProcessing(false);
         return;
       }
 
-      const isPdf = file.type === "application/pdf";
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
       const isText = file.type.startsWith("text/") || [".txt", ".md", ".csv", ".rtf"].some(ext => file.name.toLowerCase().endsWith(ext));
 
       if (isPdf) {
-        const base64 = await fileToBase64(file);
-        onFileReady({
-          fileName: file.name,
-          fileSize: file.size,
-          mediaType: "application/pdf",
-          base64,
-          extractedText: null,
-        });
+        // Extract text client-side — no need to send heavy base64
+        try {
+          const extractedText = await extractPdfText(file);
+          if (extractedText.trim().length < 50) {
+            // PDF might be scanned/image-based with very little text
+            alert("Attenzione: il PDF sembra contenere principalmente immagini. Il testo estratto potrebbe essere incompleto. Prova a incollare il testo manualmente nel campo sottostante.");
+          }
+          onFileReady({
+            fileName: file.name,
+            fileSize: file.size,
+            mediaType: "text/plain",
+            base64: null,
+            extractedText: extractedText || "(Nessun testo estratto dal PDF)",
+          });
+        } catch (pdfErr) {
+          console.error("PDF extraction error:", pdfErr);
+          alert("Errore nella lettura del PDF. Prova a incollare il testo manualmente.");
+        }
       } else if (isText) {
         const text = await fileToText(file);
         onFileReady({
@@ -150,7 +186,6 @@ function FileUpload({ onFileReady, uploadedFile, onClear }) {
           <div style={{ color: "#fff", fontSize: 14, fontWeight: 500 }}>{uploadedFile.fileName}</div>
           <div style={{ color: MUTED, fontSize: 12 }}>
             {formatSize(uploadedFile.fileSize)}
-            {uploadedFile.mediaType === "application/pdf" && " · PDF — verrà inviato nativamente a Claude"}
             {uploadedFile.extractedText && ` · ${uploadedFile.extractedText.length.toLocaleString()} caratteri estratti`}
           </div>
         </div>
@@ -303,11 +338,7 @@ function BriefAnalyzer() {
     if (uploadedFile?.extractedText) userMsg += `[Contenuto del file "${uploadedFile.fileName}"]\n${uploadedFile.extractedText}\n\n`;
     if (brief.trim()) userMsg += brief;
 
-    const filePayload = (uploadedFile?.base64 && uploadedFile.mediaType === "application/pdf")
-      ? { base64: uploadedFile.base64, mediaType: uploadedFile.mediaType, fileName: uploadedFile.fileName }
-      : null;
-
-    const res = await callAI(sys, userMsg, filePayload);
+    const res = await callAI(sys, userMsg);
     setResult(res); setLoading(false);
   };
   const hasContent = brief.trim() || uploadedFile;
@@ -343,11 +374,7 @@ function StrategyGenerator() {
     if (industry) userMsg += `Settore: ${industry}\n`;
     if (budget) userMsg += `Budget indicativo: ${budget}\n`;
 
-    const filePayload = (uploadedFile?.base64 && uploadedFile.mediaType === "application/pdf")
-      ? { base64: uploadedFile.base64, mediaType: uploadedFile.mediaType, fileName: uploadedFile.fileName }
-      : null;
-
-    const res = await callAI(sys, userMsg, filePayload);
+    const res = await callAI(sys, userMsg);
     setResult(res); setLoading(false);
   };
   const hasContent = brief.trim() || uploadedFile;
@@ -386,11 +413,7 @@ function CompetitorScanner() {
     if (competitors) userMsg += `Competitor principali: ${competitors}\n`;
     if (sector) userMsg += `Settore: ${sector}\n`;
 
-    const filePayload = (uploadedFile?.base64 && uploadedFile.mediaType === "application/pdf")
-      ? { base64: uploadedFile.base64, mediaType: uploadedFile.mediaType, fileName: uploadedFile.fileName }
-      : null;
-
-    const res = await callAI(sys, userMsg, filePayload);
+    const res = await callAI(sys, userMsg);
     setResult(res); setLoading(false);
   };
   return (
@@ -427,11 +450,7 @@ function CreativeConceptGen() {
     if (strategy.trim()) userMsg += strategy;
     if (constraints) userMsg += `\n\nVincoli/Note: ${constraints}`;
 
-    const filePayload = (uploadedFile?.base64 && uploadedFile.mediaType === "application/pdf")
-      ? { base64: uploadedFile.base64, mediaType: uploadedFile.mediaType, fileName: uploadedFile.fileName }
-      : null;
-
-    const res = await callAI(sys, userMsg, filePayload);
+    const res = await callAI(sys, userMsg);
     setResult(res); setLoading(false);
   };
   const hasContent = strategy.trim() || uploadedFile;
