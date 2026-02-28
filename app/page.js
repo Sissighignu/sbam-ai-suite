@@ -11,12 +11,14 @@ const MUTED = "#666666";
 const TEXT = "#e0e0e0";
 
 // ─── Secure API call through our backend ───
-async function callAI(system, message) {
+async function callAI(system, message, file = null) {
   try {
+    const body = { system, message };
+    if (file) body.file = file;
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ system, message }),
+      body: JSON.stringify(body),
     });
     const data = await res.json();
     if (data.error) return `Errore: ${data.error}`;
@@ -24,6 +26,182 @@ async function callAI(system, message) {
   } catch (e) {
     return `Errore di connessione: ${e.message}`;
   }
+}
+
+// ─── File to base64 helper ───
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result.split(",")[1]);
+    reader.onerror = () => reject(new Error("Errore lettura file"));
+    reader.readAsDataURL(file);
+  });
+}
+
+// ─── Read text from non-PDF files ───
+function fileToText(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("Errore lettura file"));
+    reader.readAsText(file);
+  });
+}
+
+// ─── File Upload Component ───
+function FileUpload({ onFileReady, uploadedFile, onClear }) {
+  const [dragging, setDragging] = useState(false);
+  const [processing, setProcessing] = useState(false);
+  const inputRef = { current: null };
+
+  const ACCEPTED = ".pdf,.txt,.md,.csv,.doc,.docx,.pptx,.rtf";
+
+  const processFile = async (file) => {
+    if (!file) return;
+    setProcessing(true);
+    try {
+      const isPdf = file.type === "application/pdf";
+      const isText = file.type.startsWith("text/") || [".txt", ".md", ".csv", ".rtf"].some(ext => file.name.toLowerCase().endsWith(ext));
+
+      if (isPdf) {
+        const base64 = await fileToBase64(file);
+        onFileReady({
+          fileName: file.name,
+          fileSize: file.size,
+          mediaType: "application/pdf",
+          base64,
+          extractedText: null,
+        });
+      } else if (isText) {
+        const text = await fileToText(file);
+        onFileReady({
+          fileName: file.name,
+          fileSize: file.size,
+          mediaType: file.type || "text/plain",
+          base64: null,
+          extractedText: text,
+        });
+      } else {
+        // Try reading as text for Word/PPT (basic extraction)
+        try {
+          const text = await fileToText(file);
+          onFileReady({
+            fileName: file.name,
+            fileSize: file.size,
+            mediaType: file.type,
+            base64: null,
+            extractedText: text,
+          });
+        } catch {
+          // Fallback: send as base64 for Claude to try
+          const base64 = await fileToBase64(file);
+          onFileReady({
+            fileName: file.name,
+            fileSize: file.size,
+            mediaType: file.type || "application/octet-stream",
+            base64,
+            extractedText: null,
+          });
+        }
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    setProcessing(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    setDragging(false);
+    const file = e.dataTransfer?.files?.[0];
+    if (file) processFile(file);
+  };
+
+  const handleSelect = (e) => {
+    const file = e.target?.files?.[0];
+    if (file) processFile(file);
+  };
+
+  const formatSize = (bytes) => {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / 1048576).toFixed(1) + " MB";
+  };
+
+  if (uploadedFile) {
+    return (
+      <div style={{
+        display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
+        background: `${G}08`, border: `1px solid ${G}30`, borderRadius: 10,
+        marginBottom: 12,
+      }}>
+        <span style={{ fontSize: 22 }}>
+          {uploadedFile.mediaType === "application/pdf" ? "📄" : "📝"}
+        </span>
+        <div style={{ flex: 1 }}>
+          <div style={{ color: "#fff", fontSize: 14, fontWeight: 500 }}>{uploadedFile.fileName}</div>
+          <div style={{ color: MUTED, fontSize: 12 }}>
+            {formatSize(uploadedFile.fileSize)}
+            {uploadedFile.mediaType === "application/pdf" && " · PDF — verrà inviato nativamente a Claude"}
+            {uploadedFile.extractedText && ` · ${uploadedFile.extractedText.length.toLocaleString()} caratteri estratti`}
+          </div>
+        </div>
+        <button onClick={onClear} style={{
+          background: "none", border: `1px solid ${BORDER}`, borderRadius: 6,
+          color: MUTED, cursor: "pointer", padding: "4px 10px", fontSize: 12,
+          fontFamily: "'Space Mono', monospace",
+        }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "#fff"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = MUTED; e.currentTarget.style.borderColor = BORDER; }}
+        >✕ Rimuovi</button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+      onDragLeave={() => setDragging(false)}
+      onDrop={handleDrop}
+      onClick={() => document.getElementById("file-upload-input")?.click()}
+      style={{
+        border: `2px dashed ${dragging ? G : BORDER}`,
+        borderRadius: 10,
+        padding: "20px 16px",
+        textAlign: "center",
+        cursor: "pointer",
+        background: dragging ? `${G}08` : DARKER,
+        transition: "all 0.2s",
+        marginBottom: 12,
+      }}
+      onMouseEnter={(e) => { if (!dragging) e.currentTarget.style.borderColor = G + "60"; }}
+      onMouseLeave={(e) => { if (!dragging) e.currentTarget.style.borderColor = BORDER; }}
+    >
+      <input
+        id="file-upload-input"
+        type="file"
+        accept={ACCEPTED}
+        onChange={handleSelect}
+        style={{ display: "none" }}
+      />
+      {processing ? (
+        <div style={{ color: G, fontSize: 14 }}>
+          <span style={{ display: "inline-block", width: 16, height: 16, border: `2px solid ${G}40`, borderTopColor: G, borderRadius: "50%", animation: "spin 0.6s linear infinite", marginRight: 8, verticalAlign: "middle" }} />
+          Elaborazione file...
+        </div>
+      ) : (
+        <>
+          <div style={{ fontSize: 24, marginBottom: 6 }}>📎</div>
+          <div style={{ color: MUTED, fontSize: 13 }}>
+            <span style={{ color: G, fontWeight: 600 }}>Carica un file</span> o trascinalo qui
+          </div>
+          <div style={{ color: MUTED, fontSize: 11, marginTop: 4, fontFamily: "'Space Mono', monospace" }}>
+            PDF, TXT, DOC, DOCX, PPTX, CSV
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 // ─── Rich Text Renderer ───
@@ -106,21 +284,33 @@ function ToolHeader({ icon, title, subtitle }) {
 // ─── TOOL 1: Brief Analyzer ───
 function BriefAnalyzer() {
   const [brief, setBrief] = useState("");
+  const [uploadedFile, setUploadedFile] = useState(null);
   const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
   const analyze = async () => {
     setLoading(true); setResult("");
     const sys = `Sei un senior strategist di SBAM, agenzia creativa part of JAKALA. Analizzi brief di clienti con occhio critico e costruttivo.\nRispondi SEMPRE in italiano. Usa questo formato:\n\n## Sintesi del Brief\n(riassumi in 2-3 righe l'essenza della richiesta)\n\n## Insight Chiave\n(3-5 insight strategici che emergono dal brief)\n\n## Gap & Domande Critiche\n(cosa manca nel brief? quali informazioni servono?)\n\n## Opportunità Nascoste\n(cosa il cliente non ha chiesto ma potrebbe volere)\n\n## Red Flags\n(potenziali rischi o ambiguità da chiarire subito)\n\n## Prossimi Step Consigliati\n(azioni concrete per procedere)\n\nSii diretto, concreto, e usa il linguaggio tipico di un'agenzia creativa italiana top.`;
-    const res = await callAI(sys, `Analizza questo brief cliente:\n\n${brief}`);
+
+    let userMsg = "Analizza questo brief cliente:\n\n";
+    if (uploadedFile?.extractedText) userMsg += `[Contenuto del file "${uploadedFile.fileName}"]\n${uploadedFile.extractedText}\n\n`;
+    if (brief.trim()) userMsg += brief;
+
+    const filePayload = (uploadedFile?.base64 && uploadedFile.mediaType === "application/pdf")
+      ? { base64: uploadedFile.base64, mediaType: uploadedFile.mediaType, fileName: uploadedFile.fileName }
+      : null;
+
+    const res = await callAI(sys, userMsg, filePayload);
     setResult(res); setLoading(false);
   };
+  const hasContent = brief.trim() || uploadedFile;
   return (
     <div>
-      <ToolHeader icon="🔍" title="Brief Analyzer" subtitle="Carica un brief cliente → estrai insight, gap e domande chiave" />
-      <TextArea value={brief} onChange={setBrief} placeholder="Incolla qui il brief del cliente..." rows={10} />
+      <ToolHeader icon="🔍" title="Brief Analyzer" subtitle="Carica un brief (PDF o testo) → estrai insight, gap e domande chiave" />
+      <FileUpload uploadedFile={uploadedFile} onFileReady={setUploadedFile} onClear={() => setUploadedFile(null)} />
+      <TextArea value={brief} onChange={setBrief} placeholder={uploadedFile ? "Aggiungi note o contesto aggiuntivo (opzionale)..." : "Oppure incolla qui il brief del cliente..."} rows={uploadedFile ? 4 : 10} />
       <div style={{ marginTop: 16, display: "flex", gap: 12 }}>
-        <Btn onClick={analyze} loading={loading} disabled={!brief.trim()}>Analizza Brief</Btn>
-        {brief && <Btn variant="secondary" onClick={() => { setBrief(""); setResult(""); }}>Reset</Btn>}
+        <Btn onClick={analyze} loading={loading} disabled={!hasContent}>Analizza Brief</Btn>
+        {hasContent && <Btn variant="secondary" onClick={() => { setBrief(""); setResult(""); setUploadedFile(null); }}>Reset</Btn>}
       </div>
       <ResultBox result={result} title="Analisi del Brief" />
     </div>
@@ -130,6 +320,7 @@ function BriefAnalyzer() {
 // ─── TOOL 2: Strategy Generator ───
 function StrategyGenerator() {
   const [brief, setBrief] = useState("");
+  const [uploadedFile, setUploadedFile] = useState(null);
   const [industry, setIndustry] = useState("");
   const [budget, setBudget] = useState("");
   const [result, setResult] = useState("");
@@ -137,20 +328,32 @@ function StrategyGenerator() {
   const generate = async () => {
     setLoading(true); setResult("");
     const sys = `Sei il Chief Strategy Officer di SBAM (part of JAKALA). Generi proposte strategiche complete partendo da brief.\nRispondi SEMPRE in italiano. Il tuo approccio è "Radical Simplicity": idee semplici, forti, che fanno parlare.\n\nUsa questo formato:\n\n## Executive Summary\n(la strategia in 3 righe)\n\n## Target Audience\n### Primario\n(descrizione dettagliata, insight comportamentali)\n### Secondario\n(audience secondaria)\n\n## Posizionamento & Tone of Voice\n(come il brand deve posizionarsi e parlare)\n\n## Strategia Canali\n(quali canali usare e perché, con priorità)\n\n## Big Idea\n(il concept creativo centrale — simple & loud)\n\n## Pillar di Comunicazione\n(3-4 pillar tematici su cui costruire i contenuti)\n\n## KPI Suggeriti\n(metriche concrete per misurare il successo)\n\n## Timeline Indicativa\n(macro fasi del progetto)\n\nSii ambizioso ma realistico. Pensa come un'agenzia che deve vincere la gara.`;
-    const userMsg = `Brief: ${brief}\n${industry ? `Settore: ${industry}` : ""}\n${budget ? `Budget indicativo: ${budget}` : ""}`;
-    const res = await callAI(sys, userMsg);
+
+    let userMsg = "";
+    if (uploadedFile?.extractedText) userMsg += `[Contenuto del file "${uploadedFile.fileName}"]\n${uploadedFile.extractedText}\n\n`;
+    if (brief.trim()) userMsg += `Brief: ${brief}\n`;
+    if (industry) userMsg += `Settore: ${industry}\n`;
+    if (budget) userMsg += `Budget indicativo: ${budget}\n`;
+
+    const filePayload = (uploadedFile?.base64 && uploadedFile.mediaType === "application/pdf")
+      ? { base64: uploadedFile.base64, mediaType: uploadedFile.mediaType, fileName: uploadedFile.fileName }
+      : null;
+
+    const res = await callAI(sys, userMsg, filePayload);
     setResult(res); setLoading(false);
   };
+  const hasContent = brief.trim() || uploadedFile;
   return (
     <div>
       <ToolHeader icon="🎯" title="Strategy Generator" subtitle="Dal brief alla proposta strategica con target, tone of voice e canali" />
-      <TextArea value={brief} onChange={setBrief} placeholder="Inserisci il brief o il contesto del progetto..." rows={8} />
+      <FileUpload uploadedFile={uploadedFile} onFileReady={setUploadedFile} onClear={() => setUploadedFile(null)} />
+      <TextArea value={brief} onChange={setBrief} placeholder={uploadedFile ? "Aggiungi contesto o indicazioni aggiuntive..." : "Inserisci il brief o il contesto del progetto..."} rows={uploadedFile ? 4 : 8} />
       <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
         <Input value={industry} onChange={setIndustry} placeholder="Settore (es. Fashion, Food...)" />
         <Input value={budget} onChange={setBudget} placeholder="Budget (opzionale)" />
       </div>
       <div style={{ marginTop: 16 }}>
-        <Btn onClick={generate} loading={loading} disabled={!brief.trim()}>Genera Strategia</Btn>
+        <Btn onClick={generate} loading={loading} disabled={!hasContent}>Genera Strategia</Btn>
       </div>
       <ResultBox result={result} title="Proposta Strategica" />
     </div>
@@ -160,6 +363,7 @@ function StrategyGenerator() {
 // ─── TOOL 3: Competitor & Trend Scanner ───
 function CompetitorScanner() {
   const [brand, setBrand] = useState("");
+  const [uploadedFile, setUploadedFile] = useState(null);
   const [competitors, setCompetitors] = useState("");
   const [sector, setSector] = useState("");
   const [result, setResult] = useState("");
@@ -167,13 +371,24 @@ function CompetitorScanner() {
   const scan = async () => {
     setLoading(true); setResult("");
     const sys = `Sei un senior strategist di SBAM specializzato in competitive intelligence e trend analysis per il mercato italiano ed europeo.\nRispondi SEMPRE in italiano. Analizza il panorama competitivo e i trend rilevanti.\n\nUsa questo formato:\n\n## Overview del Mercato\n(contesto e dinamiche principali del settore)\n\n## Analisi Competitor\n(per ogni competitor: posizionamento, punti di forza, debolezze, strategia di comunicazione)\n\n## Trend Rilevanti\n### Macro Trend\n(trend di settore a livello macro)\n### Micro Trend\n(trend emergenti e nicchie da esplorare)\n### Trend Social & Content\n(cosa funziona in comunicazione nel settore)\n\n## White Space & Opportunità\n(dove i competitor non sono presenti? dove c'è spazio?)\n\n## Minacce\n(rischi competitivi da monitorare)\n\n## Raccomandazioni per il Brand\n(come differenziarsi concretamente)\n\nBasa la tua analisi sulla tua conoscenza del mercato. Sii specifico e azionabile.`;
-    const userMsg = `Brand/Azienda: ${brand}\n${competitors ? `Competitor principali: ${competitors}` : ""}\n${sector ? `Settore: ${sector}` : ""}`;
-    const res = await callAI(sys, userMsg);
+
+    let userMsg = "";
+    if (uploadedFile?.extractedText) userMsg += `[Contenuto del file "${uploadedFile.fileName}"]\n${uploadedFile.extractedText}\n\n`;
+    userMsg += `Brand/Azienda: ${brand}\n`;
+    if (competitors) userMsg += `Competitor principali: ${competitors}\n`;
+    if (sector) userMsg += `Settore: ${sector}\n`;
+
+    const filePayload = (uploadedFile?.base64 && uploadedFile.mediaType === "application/pdf")
+      ? { base64: uploadedFile.base64, mediaType: uploadedFile.mediaType, fileName: uploadedFile.fileName }
+      : null;
+
+    const res = await callAI(sys, userMsg, filePayload);
     setResult(res); setLoading(false);
   };
   return (
     <div>
       <ToolHeader icon="📡" title="Competitor & Trend Scanner" subtitle="Analisi competitor e trend di settore dal brief" />
+      <FileUpload uploadedFile={uploadedFile} onFileReady={setUploadedFile} onClear={() => setUploadedFile(null)} />
       <Input value={brand} onChange={setBrand} placeholder="Brand o azienda da analizzare" style={{ width: "100%", marginBottom: 12, flex: "none" }} />
       <div style={{ display: "flex", gap: 12 }}>
         <Input value={competitors} onChange={setCompetitors} placeholder="Competitor noti (opzionale)" />
@@ -190,6 +405,7 @@ function CompetitorScanner() {
 // ─── TOOL 4: Creative Concept Generator ───
 function CreativeConceptGen() {
   const [strategy, setStrategy] = useState("");
+  const [uploadedFile, setUploadedFile] = useState(null);
   const [constraints, setConstraints] = useState("");
   const [numConcepts, setNumConcepts] = useState("3");
   const [result, setResult] = useState("");
@@ -197,14 +413,25 @@ function CreativeConceptGen() {
   const generate = async () => {
     setLoading(true); setResult("");
     const sys = `Sei il Chief Creative Officer di SBAM. Generi concept creativi brillanti, semplici e impattanti, seguendo la filosofia "Radical Simplicity".\nRispondi SEMPRE in italiano. Genera ${numConcepts} concept creativi distinti. Per ciascuno usa questo formato:\n\n### Concept [N]: [Nome del Concept]\n\n**La Big Idea in una frase**\n(il concept sintetizzato in modo memorabile)\n\n**Insight di partenza**\n(l'insight umano/culturale su cui si basa)\n\n**Esecuzione**\n(come prende vita concretamente: canali, formati, meccaniche)\n\n**Headline/Claim**\n(proposta di headline o claim principale)\n\n**Tono**\n(registro comunicativo)\n\n**Perché funziona**\n(motivazione strategica)\n\n---\n\nSii audace, sorprendente, culturalmente rilevante. I concept devono essere "simple & loud" — facili da capire, impossibili da ignorare.`;
-    const userMsg = `Strategia/Brief di partenza:\n${strategy}\n${constraints ? `\nVincoli/Note: ${constraints}` : ""}`;
-    const res = await callAI(sys, userMsg);
+
+    let userMsg = "Strategia/Brief di partenza:\n";
+    if (uploadedFile?.extractedText) userMsg += `[Contenuto del file "${uploadedFile.fileName}"]\n${uploadedFile.extractedText}\n\n`;
+    if (strategy.trim()) userMsg += strategy;
+    if (constraints) userMsg += `\n\nVincoli/Note: ${constraints}`;
+
+    const filePayload = (uploadedFile?.base64 && uploadedFile.mediaType === "application/pdf")
+      ? { base64: uploadedFile.base64, mediaType: uploadedFile.mediaType, fileName: uploadedFile.fileName }
+      : null;
+
+    const res = await callAI(sys, userMsg, filePayload);
     setResult(res); setLoading(false);
   };
+  const hasContent = strategy.trim() || uploadedFile;
   return (
     <div>
       <ToolHeader icon="💡" title="Creative Concept Generator" subtitle="Genera concept creativi a partire dalla strategia — Simple & Loud" />
-      <TextArea value={strategy} onChange={setStrategy} placeholder="Incolla la strategia o il brief su cui generare i concept..." rows={8} />
+      <FileUpload uploadedFile={uploadedFile} onFileReady={setUploadedFile} onClear={() => setUploadedFile(null)} />
+      <TextArea value={strategy} onChange={setStrategy} placeholder={uploadedFile ? "Aggiungi indicazioni o contesto aggiuntivo..." : "Incolla la strategia o il brief su cui generare i concept..."} rows={uploadedFile ? 4 : 8} />
       <div style={{ display: "flex", gap: 12, marginTop: 12, alignItems: "center" }}>
         <Input value={constraints} onChange={setConstraints} placeholder="Vincoli o note aggiuntive (opzionale)" />
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -219,7 +446,7 @@ function CreativeConceptGen() {
         </div>
       </div>
       <div style={{ marginTop: 16 }}>
-        <Btn onClick={generate} loading={loading} disabled={!strategy.trim()}>Genera Concept</Btn>
+        <Btn onClick={generate} loading={loading} disabled={!hasContent}>Genera Concept</Btn>
       </div>
       <ResultBox result={result} title="Concept Creativi" />
     </div>
