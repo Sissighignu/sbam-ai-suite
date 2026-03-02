@@ -9,17 +9,28 @@ const client = new Anthropic({
 
 export async function POST(request) {
   try {
-    const { system, message } = await request.json();
+    const body = await request.json();
+    const { system, messages, message } = body;
 
-    if (!message || !system) {
-      return NextResponse.json({ error: "Missing system or message" }, { status: 400 });
+    if (!system) {
+      return NextResponse.json({ error: "Missing system prompt" }, { status: 400 });
+    }
+
+    // Support both multi-turn (messages array) and single-turn (message string)
+    let apiMessages;
+    if (messages && Array.isArray(messages)) {
+      apiMessages = messages.map(m => ({ role: m.role, content: m.content }));
+    } else if (message) {
+      apiMessages = [{ role: "user", content: message }];
+    } else {
+      return NextResponse.json({ error: "No messages provided" }, { status: 400 });
     }
 
     const response = await client.messages.create({
       model: "claude-sonnet-4-20250514",
       max_tokens: 4000,
       system: system,
-      messages: [{ role: "user", content: message }],
+      messages: apiMessages,
     });
 
     const text = response.content
