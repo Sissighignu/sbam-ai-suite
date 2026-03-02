@@ -14,6 +14,72 @@ const TEXT = "#e0e0e0";
 const SBAM_CONTEXT = `Sei parte di SBAM, agenzia creativa part of JAKALA. La filosofia di SBAM è "Radical Simplicity": idee semplici, forti, che fanno parlare. Rispondi SEMPRE in italiano.`;
 
 const SYSTEM_PROMPTS = {
+  pitch: `${SBAM_CONTEXT}
+Il tuo ruolo è aiutare il team a decidere se partecipare o meno a una gara (pitch). Valuti le opportunità in base alle regole interne di SBAM.
+
+REGOLE DI VALUTAZIONE SBAM:
+
+CRITERI ECONOMICI:
+- Soglia minima net revenue: 50.000€. Sotto questa soglia → semaforo GIALLO (non automaticamente rosso, ma richiede giustificazione strategica).
+- Se è previsto un rimborso spese per la partecipazione alla gara → forte segnale positivo, tendenzialmente cerchiamo di partecipare sempre.
+- Valuta l'adeguatezza del budget rispetto ai deliverable richiesti.
+
+CRITERI STRATEGICI:
+- Clienti multinazionali multibrand (es. Nestlé, Campari, P&G, Unilever, LVMH): anche se la gara specifica è piccola, può avere senso partecipare perché vincerla apre la porta a gare per altri brand del gruppo. Questo è un forte fattore positivo.
+- Potenziale a lungo termine: il cliente potrebbe diventare un account stabile?
+- Fit con il posizionamento SBAM: il progetto è coerente con "Radical Simplicity"?
+- Potenziale di portfolio/case study: il lavoro sarebbe mostrabile e prestigioso?
+
+CRITERI DI COMPETITIVITÀ:
+- Numero di agenzie invitate: più sono, più si diluisce la probabilità di vincita.
+- Presenza di un incumbent radicato → rischio di gara "di cortesia".
+- Se conosciamo i nomi delle altre agenzie in gara: è un'informazione molto preziosa. Agenzie troppo piccole/economiche rispetto a SBAM suggeriscono che il cliente cerca soluzioni low-cost. Agenzie di pari livello o superiori confermano che è una gara seria. Dare scoring più alto quando si conoscono i competitor.
+- Vantaggio competitivo SBAM: abbiamo esperienza nel settore? Relazioni? Competenze specifiche?
+
+CRITERI DI FATTIBILITÀ:
+- Timeline della gara rispetto al carico attuale del team.
+- Peso dei deliverable richiesti sulla struttura (quante risorse servono? quanto tempo?).
+- Risorse necessarie vs disponibili.
+
+RED FLAGS:
+- Gara "di cortesia" (segnali: brief vago, incumbent molto radicato, tempistiche irrealistiche).
+- Brief irrealistico o ambiguo.
+- Condizioni contrattuali problematiche.
+- Troppe agenzie invitate (>5-6) senza rimborso.
+
+FORMATO DI OUTPUT:
+Rispondi con un'analisi strutturata in questo formato:
+
+## 🔴/🟡/🟢 SEMAFORO: [ROSSO/GIALLO/VERDE]
+
+### Motivazione principale
+(in 2-3 righe, il motivo chiave della raccomandazione)
+
+### Analisi per criteri
+
+**Economico** [🔴/🟡/🟢]
+(valutazione del budget, revenue, rimborso)
+
+**Strategico** [🔴/🟡/🟢]
+(fit con SBAM, potenziale futuro, prestigio)
+
+**Competitivo** [🔴/🟡/🟢]
+(probabilità di vincita, posizionamento vs competitor)
+
+**Fattibilità** [🔴/🟡/🟢]
+(risorse, timeline, peso sulla struttura)
+
+### Red Flags rilevate
+(elenco di eventuali segnali d'allarme, o "nessuna" se non ce ne sono)
+
+### Raccomandazione
+(GO / NO-GO / GO CON RISERVA — con condizioni specifiche)
+
+### Domande da chiarire prima di decidere
+(cosa manca per dare un giudizio definitivo)
+
+Nelle risposte successive, approfondisci aspetti specifici, rivaluta in base a nuove informazioni, e aiuta il team a prendere la decisione migliore. Se l'utente fornisce i nomi delle agenzie competitor, analizzale e rivaluta lo scoring.`,
+
   brief: `${SBAM_CONTEXT}
 Il tuo ruolo è analizzare brief di clienti con occhio critico e costruttivo, come un senior strategist.
 
@@ -66,6 +132,7 @@ Nelle risposte successive, sviluppa concept specifici, generane di nuovi, o affi
 };
 
 const TOOL_CONFIG = {
+  pitch: { icon: "⚖️", title: "Pitch Screener", subtitle: "Valuta se accettare una gara — semaforo GO / NO-GO", tag: "SCREENING", welcome: "Descrivi la gara: cliente, budget, deliverable richiesti, timeline, numero agenzie invitate. Ti darò un semaforo con la raccomandazione.", starters: ["Il cliente offre un rimborso spese?", "È un grande gruppo multinazionale multibrand?", "Quante agenzie sono state invitate?"] },
   brief: { icon: "🔍", title: "Brief Analyzer", subtitle: "Analizza brief in conversazione — approfondisci ogni aspetto", tag: "ANALYSIS", welcome: "Carica un brief (PDF) o descrivi il progetto. Analizzerò tutto e poi potrai chiedermi di approfondire qualsiasi aspetto.", starters: ["Analizza i punti deboli del brief", "Identifica il vero obiettivo del cliente", "Suggerisci domande da fare al cliente"] },
   strategy: { icon: "🎯", title: "Strategy Generator", subtitle: "Costruisci la strategia insieme all'AI — itera ogni dettaglio", tag: "STRATEGY", welcome: "Condividi il brief o il contesto. Genererò una proposta strategica completa e potrai affinare ogni aspetto.", starters: ["Focalizzati sul target Gen Z", "Proponi una strategia digital-first", "Includi una fase di branded content"] },
   competitor: { icon: "📡", title: "Competitor & Trend Scanner", subtitle: "Esplora il mercato in profondità — vai oltre la superficie", tag: "INTELLIGENCE", welcome: "Dimmi brand e settore. Mapperò competitor e trend, poi potrai esplorare in profondità.", starters: ["Analizza la comunicazione social dei competitor", "Identifica trend emergenti nel settore", "Trova white space non presidiati"] },
@@ -240,7 +307,7 @@ function ChatTool({ toolId, initialContent, onSendToTool }) {
   const handleKeyDown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
 
   const lastAssistantMsg = [...messages].reverse().find(m => m.role === "assistant");
-  const pipeline = { brief: [{ id: "strategy", label: "Genera Strategia", icon: "🎯" }, { id: "competitor", label: "Scansiona Competitor", icon: "📡" }], strategy: [{ id: "creative", label: "Genera Concept", icon: "💡" }], competitor: [{ id: "strategy", label: "Genera Strategia", icon: "🎯" }], creative: [] };
+  const pipeline = { pitch: [{ id: "brief", label: "Analizza Brief", icon: "🔍" }], brief: [{ id: "strategy", label: "Genera Strategia", icon: "🎯" }, { id: "competitor", label: "Scansiona Competitor", icon: "📡" }], strategy: [{ id: "creative", label: "Genera Concept", icon: "💡" }], competitor: [{ id: "strategy", label: "Genera Strategia", icon: "🎯" }], creative: [] };
   const formatSize = (b) => b < 1024 ? b + " B" : b < 1048576 ? (b / 1024).toFixed(1) + " KB" : (b / 1048576).toFixed(1) + " MB";
 
   return (
@@ -337,6 +404,7 @@ function ChatTool({ toolId, initialContent, onSendToTool }) {
 // ─── Navigation ───
 const TOOLS = [
   { id: "home", label: "Home", icon: "⚡" },
+  { id: "pitch", label: "Pitch Screener", icon: "⚖️" },
   { id: "brief", label: "Brief Analyzer", icon: "🔍" },
   { id: "strategy", label: "Strategy Gen", icon: "🎯" },
   { id: "competitor", label: "Trend Scanner", icon: "📡" },
@@ -346,6 +414,7 @@ const TOOLS = [
 // ─── Home ───
 function Home({ onNavigate }) {
   const cards = [
+    { id: "pitch", icon: "⚖️", title: "Pitch Screener", desc: "Valuta se accettare una gara. Semaforo GO/NO-GO basato sulle regole SBAM.", tag: "SCREENING" },
     { id: "brief", icon: "🔍", title: "Brief Analyzer", desc: "Analizza brief in una conversazione guidata. Carica un PDF, esplora insight, affina l'analisi.", tag: "ANALYSIS" },
     { id: "strategy", icon: "🎯", title: "Strategy Generator", desc: "Costruisci la strategia insieme all'AI. Target, canali, big idea — itera fino alla perfezione.", tag: "STRATEGY" },
     { id: "competitor", icon: "📡", title: "Trend Scanner", desc: "Esplora il mercato in profondità. Competitor, trend, white space — approfondisci con domande.", tag: "INTELLIGENCE" },
@@ -362,16 +431,32 @@ function Home({ onNavigate }) {
         </div>
         <p style={{ fontSize: 16, color: MUTED, maxWidth: 460, margin: "0 auto 6px", lineHeight: 1.6, fontFamily: "'DM Sans', sans-serif" }}>La suite AI interna per il team SBAM.</p>
         <p style={{ fontSize: 14, color: MUTED, maxWidth: 460, margin: "0 auto", fontFamily: "'DM Sans', sans-serif", fontStyle: "italic" }}>Radical Simplicity, superpowered by AI.</p>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 28, padding: "10px 16px", background: `${G}06`, borderRadius: 10, maxWidth: 440, margin: "28px auto 0" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 28, padding: "10px 16px", background: `${G}06`, borderRadius: 10, maxWidth: 520, margin: "28px auto 0" }}>
           <span style={{ fontSize: 10, fontFamily: "'Space Mono', monospace", color: G }}>WORKFLOW</span>
           <span style={{ color: MUTED, fontSize: 10 }}>│</span>
-          {["🔍", "🎯", "📡", "💡"].map((e, i) => <span key={i}><span style={{ fontSize: 12 }}>{e}</span>{i < 3 && <span style={{ color: MUTED, fontSize: 10, margin: "0 2px" }}>→</span>}</span>)}
+          {["⚖️", "🔍", "📡", "🎯", "💡"].map((e, i) => <span key={i}><span style={{ fontSize: 12 }}>{e}</span>{i < 4 && <span style={{ color: MUTED, fontSize: 10, margin: "0 2px" }}>→</span>}</span>)}
           <span style={{ color: MUTED, fontSize: 10 }}>│</span>
-          <span style={{ fontSize: 10, color: MUTED, fontFamily: "'Space Mono', monospace" }}>Brief → Strategy → Concept</span>
+          <span style={{ fontSize: 9, color: MUTED, fontFamily: "'Space Mono', monospace" }}>Screen → Brief → Trends → Strategy → Concept</span>
         </div>
       </div>
+      {/* Pitch Screener — featured card */}
+      <div style={{ padding: "0 20px", marginBottom: 14 }}>
+        <div onClick={() => onNavigate("pitch")}
+          style={{ background: CARD, border: `1px solid ${G}30`, borderRadius: 13, padding: "24px 28px", cursor: "pointer", transition: "all 0.25s ease", position: "relative", display: "flex", alignItems: "center", gap: 20 }}
+          onMouseEnter={e => { e.currentTarget.style.borderColor = G; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = `0 6px 24px ${G}15`; }}
+          onMouseLeave={e => { e.currentTarget.style.borderColor = `${G}30`; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}>
+          <div style={{ fontSize: 36 }}>⚖️</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 9, fontFamily: "'Space Mono', monospace", color: G, letterSpacing: 2, marginBottom: 6 }}>STEP 0 · SCREENING</div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: "0 0 4px", fontFamily: "'Space Mono', monospace" }}>Pitch Screener</h3>
+            <p style={{ fontSize: 13, color: MUTED, margin: 0, lineHeight: 1.5 }}>Nuova gara in arrivo? Valuta se accettarla con semaforo GO / NO-GO basato sulle regole SBAM.</p>
+          </div>
+          <div style={{ color: G, fontSize: 22, opacity: 0.5 }}>→</div>
+        </div>
+      </div>
+      {/* Other 4 tools in grid */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, padding: "0 20px" }}>
-        {cards.map(card => (
+        {cards.filter(c => c.id !== "pitch").map(card => (
           <div key={card.id} onClick={() => onNavigate(card.id)}
             style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 13, padding: 24, cursor: "pointer", transition: "all 0.25s ease", position: "relative" }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = G; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = `0 6px 24px ${G}12`; }}
