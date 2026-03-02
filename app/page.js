@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 
 const G = "#c8e64a";
 const DARK = "#0a0a0a";
@@ -10,13 +10,75 @@ const BORDER = "#1a1a1a";
 const MUTED = "#666666";
 const TEXT = "#e0e0e0";
 
-// ─── Secure API call through our backend ───
-async function callAI(system, message) {
+// ─── SYSTEM PROMPTS (predisposti per knowledge base SBAM - Fase 3) ───
+const SBAM_CONTEXT = `Sei parte di SBAM, agenzia creativa part of JAKALA. La filosofia di SBAM è "Radical Simplicity": idee semplici, forti, che fanno parlare. Rispondi SEMPRE in italiano.`;
+
+const SYSTEM_PROMPTS = {
+  brief: `${SBAM_CONTEXT}
+Il tuo ruolo è analizzare brief di clienti con occhio critico e costruttivo, come un senior strategist.
+
+Quando ricevi un brief per la prima volta, analizzalo con questo formato:
+## Sintesi del Brief
+## Insight Chiave
+## Gap & Domande Critiche
+## Opportunità Nascoste
+## Red Flags
+## Prossimi Step Consigliati
+
+Nelle risposte successive, rispondi in modo conversazionale: approfondisci, riformula, esplora nuove direzioni. Mantieni sempre il contesto. Sii diretto e concreto.`,
+
+  strategy: `${SBAM_CONTEXT}
+Il tuo ruolo è Chief Strategy Officer. Generi proposte strategiche complete.
+
+Quando ricevi un brief per la prima volta, usa questo formato:
+## Executive Summary
+## Target Audience (Primario e Secondario)
+## Posizionamento & Tone of Voice
+## Strategia Canali
+## Big Idea
+## Pillar di Comunicazione
+## KPI Suggeriti
+## Timeline Indicativa
+
+Nelle risposte successive, approfondisci e raffina la strategia in base al feedback. Sii ambizioso ma realistico.`,
+
+  competitor: `${SBAM_CONTEXT}
+Il tuo ruolo è specialista in competitive intelligence e trend analysis per il mercato italiano ed europeo.
+
+Quando ricevi una richiesta per la prima volta, usa questo formato:
+## Overview del Mercato
+## Analisi Competitor
+## Trend Rilevanti (Macro, Micro, Social & Content)
+## White Space & Opportunità
+## Minacce
+## Raccomandazioni per il Brand
+
+Nelle risposte successive, approfondisci specifici competitor, trend o aspetti del mercato. Sii specifico e azionabile.`,
+
+  creative: `${SBAM_CONTEXT}
+Il tuo ruolo è Chief Creative Officer. Generi concept creativi Simple & Loud.
+
+Quando ricevi una richiesta per la prima volta, genera 3 concept creativi distinti con questo formato per ciascuno:
+### Concept [N]: [Nome]
+**Big Idea** · **Insight** · **Esecuzione** · **Headline/Claim** · **Tono** · **Perché funziona**
+
+Nelle risposte successive, sviluppa concept specifici, generane di nuovi, o affina in base al feedback. Sii audace e culturalmente rilevante.`,
+};
+
+const TOOL_CONFIG = {
+  brief: { icon: "🔍", title: "Brief Analyzer", subtitle: "Analizza brief in conversazione — approfondisci ogni aspetto", tag: "ANALYSIS", welcome: "Carica un brief (PDF) o descrivi il progetto. Analizzerò tutto e poi potrai chiedermi di approfondire qualsiasi aspetto.", starters: ["Analizza i punti deboli del brief", "Identifica il vero obiettivo del cliente", "Suggerisci domande da fare al cliente"] },
+  strategy: { icon: "🎯", title: "Strategy Generator", subtitle: "Costruisci la strategia insieme all'AI — itera ogni dettaglio", tag: "STRATEGY", welcome: "Condividi il brief o il contesto. Genererò una proposta strategica completa e potrai affinare ogni aspetto.", starters: ["Focalizzati sul target Gen Z", "Proponi una strategia digital-first", "Includi una fase di branded content"] },
+  competitor: { icon: "📡", title: "Competitor & Trend Scanner", subtitle: "Esplora il mercato in profondità — vai oltre la superficie", tag: "INTELLIGENCE", welcome: "Dimmi brand e settore. Mapperò competitor e trend, poi potrai esplorare in profondità.", starters: ["Analizza la comunicazione social dei competitor", "Identifica trend emergenti nel settore", "Trova white space non presidiati"] },
+  creative: { icon: "💡", title: "Creative Concept Generator", subtitle: "Genera concept e iterali fino alla perfezione", tag: "CREATIVE", welcome: "Condividi strategia o brief. Genererò concept creativi e potrai svilupparli, modificarli o esplorare nuove direzioni.", starters: ["Sviluppa di più il Concept 1", "Proponi un concept più provocatorio", "Genera concept per una campagna social-first"] },
+};
+
+// ─── API Call (multi-turn conversation) ───
+async function callAI(system, messages) {
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ system, message }),
+      body: JSON.stringify({ system, messages }),
     });
     const data = await res.json();
     if (data.error) return `Errore: ${data.error}`;
@@ -26,456 +88,248 @@ async function callAI(system, message) {
   }
 }
 
-// ─── File to base64 helper ───
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(",")[1]);
-    reader.onerror = () => reject(new Error("Errore lettura file"));
-    reader.readAsDataURL(file);
-  });
-}
-
-// ─── Read text from non-PDF files ───
-function fileToText(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.onerror = () => reject(new Error("Errore lettura file"));
-    reader.readAsText(file);
-  });
-}
-
-// ─── File Upload Component ───
-function FileUpload({ onFileReady, uploadedFile, onClear }) {
-  const [dragging, setDragging] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const inputRef = { current: null };
-
-  const ACCEPTED = ".pdf,.txt,.md,.csv,.doc,.docx,.pptx,.rtf";
-
-  // Extract text from PDF using pdf.js (loaded from CDN)
-  const extractPdfText = async (file) => {
-    // Dynamically load pdf.js if not loaded
-    if (!window.pdfjsLib) {
-      await new Promise((resolve, reject) => {
-        const script = document.createElement("script");
-        script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.4.168/pdf.min.mjs";
-        script.type = "module";
-        // Use the global build instead
-        const script2 = document.createElement("script");
-        script2.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-        script2.onload = resolve;
-        script2.onerror = reject;
-        document.head.appendChild(script2);
-      });
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-    }
-    const arrayBuffer = await file.arrayBuffer();
-    const pdf = await window.pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const pages = [];
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      const text = content.items.map((item) => item.str).join(" ");
-      if (text.trim()) pages.push(`[Pagina ${i}]\n${text}`);
-    }
-    return pages.join("\n\n");
-  };
-
-  const processFile = async (file) => {
-    if (!file) return;
-    setProcessing(true);
-    try {
-      const maxSize = 50 * 1024 * 1024; // 50MB
-      if (file.size > maxSize) {
-        alert(`File troppo grande (${(file.size / 1048576).toFixed(1)} MB). Il limite è 50 MB.`);
-        setProcessing(false);
-        return;
-      }
-
-      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-      const isText = file.type.startsWith("text/") || [".txt", ".md", ".csv", ".rtf"].some(ext => file.name.toLowerCase().endsWith(ext));
-
-      if (isPdf) {
-        // Extract text client-side — no need to send heavy base64
-        try {
-          const extractedText = await extractPdfText(file);
-          if (extractedText.trim().length < 50) {
-            // PDF might be scanned/image-based with very little text
-            alert("Attenzione: il PDF sembra contenere principalmente immagini. Il testo estratto potrebbe essere incompleto. Prova a incollare il testo manualmente nel campo sottostante.");
-          }
-          onFileReady({
-            fileName: file.name,
-            fileSize: file.size,
-            mediaType: "text/plain",
-            base64: null,
-            extractedText: extractedText || "(Nessun testo estratto dal PDF)",
-          });
-        } catch (pdfErr) {
-          console.error("PDF extraction error:", pdfErr);
-          alert("Errore nella lettura del PDF. Prova a incollare il testo manualmente.");
-        }
-      } else if (isText) {
-        const text = await fileToText(file);
-        onFileReady({
-          fileName: file.name,
-          fileSize: file.size,
-          mediaType: file.type || "text/plain",
-          base64: null,
-          extractedText: text,
-        });
-      } else {
-        // Try reading as text for Word/PPT (basic extraction)
-        try {
-          const text = await fileToText(file);
-          onFileReady({
-            fileName: file.name,
-            fileSize: file.size,
-            mediaType: file.type,
-            base64: null,
-            extractedText: text,
-          });
-        } catch {
-          // Fallback: send as base64 for Claude to try
-          const base64 = await fileToBase64(file);
-          onFileReady({
-            fileName: file.name,
-            fileSize: file.size,
-            mediaType: file.type || "application/octet-stream",
-            base64,
-            extractedText: null,
-          });
-        }
-      }
-    } catch (err) {
-      console.error(err);
-    }
-    setProcessing(false);
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    setDragging(false);
-    const file = e.dataTransfer?.files?.[0];
-    if (file) processFile(file);
-  };
-
-  const handleSelect = (e) => {
-    const file = e.target?.files?.[0];
-    if (file) processFile(file);
-  };
-
-  const formatSize = (bytes) => {
-    if (bytes < 1024) return bytes + " B";
-    if (bytes < 1048576) return (bytes / 1024).toFixed(1) + " KB";
-    return (bytes / 1048576).toFixed(1) + " MB";
-  };
-
-  if (uploadedFile) {
-    return (
-      <div style={{
-        display: "flex", alignItems: "center", gap: 12, padding: "12px 16px",
-        background: `${G}08`, border: `1px solid ${G}30`, borderRadius: 10,
-        marginBottom: 12,
-      }}>
-        <span style={{ fontSize: 22 }}>
-          {uploadedFile.mediaType === "application/pdf" ? "📄" : "📝"}
-        </span>
-        <div style={{ flex: 1 }}>
-          <div style={{ color: "#fff", fontSize: 14, fontWeight: 500 }}>{uploadedFile.fileName}</div>
-          <div style={{ color: MUTED, fontSize: 12 }}>
-            {formatSize(uploadedFile.fileSize)}
-            {uploadedFile.extractedText && ` · ${uploadedFile.extractedText.length.toLocaleString()} caratteri estratti`}
-          </div>
-        </div>
-        <button onClick={onClear} style={{
-          background: "none", border: `1px solid ${BORDER}`, borderRadius: 6,
-          color: MUTED, cursor: "pointer", padding: "4px 10px", fontSize: 12,
-          fontFamily: "'Space Mono', monospace",
-        }}
-          onMouseEnter={(e) => { e.currentTarget.style.color = "#fff"; e.currentTarget.style.borderColor = "#fff"; }}
-          onMouseLeave={(e) => { e.currentTarget.style.color = MUTED; e.currentTarget.style.borderColor = BORDER; }}
-        >✕ Rimuovi</button>
-      </div>
-    );
+// ─── PDF Text Extraction (client-side) ───
+async function extractPdfText(file) {
+  if (!window.pdfjsLib) {
+    await new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
   }
-
-  return (
-    <div
-      onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={handleDrop}
-      onClick={() => document.getElementById("file-upload-input")?.click()}
-      style={{
-        border: `2px dashed ${dragging ? G : BORDER}`,
-        borderRadius: 10,
-        padding: "20px 16px",
-        textAlign: "center",
-        cursor: "pointer",
-        background: dragging ? `${G}08` : DARKER,
-        transition: "all 0.2s",
-        marginBottom: 12,
-      }}
-      onMouseEnter={(e) => { if (!dragging) e.currentTarget.style.borderColor = G + "60"; }}
-      onMouseLeave={(e) => { if (!dragging) e.currentTarget.style.borderColor = BORDER; }}
-    >
-      <input
-        id="file-upload-input"
-        type="file"
-        accept={ACCEPTED}
-        onChange={handleSelect}
-        style={{ display: "none" }}
-      />
-      {processing ? (
-        <div style={{ color: G, fontSize: 14 }}>
-          <span style={{ display: "inline-block", width: 16, height: 16, border: `2px solid ${G}40`, borderTopColor: G, borderRadius: "50%", animation: "spin 0.6s linear infinite", marginRight: 8, verticalAlign: "middle" }} />
-          Elaborazione file...
-        </div>
-      ) : (
-        <>
-          <div style={{ fontSize: 24, marginBottom: 6 }}>📎</div>
-          <div style={{ color: MUTED, fontSize: 13 }}>
-            <span style={{ color: G, fontWeight: 600 }}>Carica un file</span> o trascinalo qui
-          </div>
-          <div style={{ color: MUTED, fontSize: 11, marginTop: 4, fontFamily: "'Space Mono', monospace" }}>
-            PDF, TXT, DOC, DOCX, PPTX, CSV
-          </div>
-        </>
-      )}
-    </div>
-  );
+  const buf = await file.arrayBuffer();
+  const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
+  const pages = [];
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const content = await page.getTextContent();
+    const text = content.items.map(item => item.str).join(" ");
+    if (text.trim()) pages.push(`[Pagina ${i}]\n${text}`);
+  }
+  return pages.join("\n\n");
 }
 
 // ─── Rich Text Renderer ───
 function RichText({ text }) {
   if (!text) return null;
-  const lines = text.split("\n");
   return (
-    <div style={{ lineHeight: 1.7, color: TEXT }}>
-      {lines.map((line, i) => {
-        if (line.startsWith("### "))
-          return <h3 key={i} style={{ color: G, fontSize: 16, fontWeight: 700, margin: "20px 0 8px", fontFamily: "'Space Mono', monospace" }}>{line.slice(4)}</h3>;
-        if (line.startsWith("## "))
-          return <h2 key={i} style={{ color: "#fff", fontSize: 20, fontWeight: 700, margin: "24px 0 10px", fontFamily: "'Space Mono', monospace" }}>{line.slice(3)}</h2>;
-        if (line.startsWith("# "))
-          return <h1 key={i} style={{ color: "#fff", fontSize: 24, fontWeight: 700, margin: "28px 0 12px", fontFamily: "'Space Mono', monospace" }}>{line.slice(2)}</h1>;
-        if (line.startsWith("- ") || line.startsWith("• "))
-          return <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4, paddingLeft: 8 }}><span style={{ color: G }}>▸</span><span dangerouslySetInnerHTML={{ __html: boldify(line.slice(2)) }} /></div>;
-        if (line.startsWith("---"))
-          return <hr key={i} style={{ border: "none", borderTop: `1px solid ${BORDER}`, margin: "16px 0" }} />;
-        if (line.trim() === "") return <div key={i} style={{ height: 10 }} />;
-        return <p key={i} style={{ margin: "4px 0" }} dangerouslySetInnerHTML={{ __html: boldify(line) }} />;
+    <div style={{ lineHeight: 1.7, color: TEXT, fontSize: 14 }}>
+      {text.split("\n").map((line, i) => {
+        if (line.startsWith("### ")) return <h3 key={i} style={{ color: G, fontSize: 15, fontWeight: 700, margin: "16px 0 6px", fontFamily: "'Space Mono', monospace" }}>{line.slice(4)}</h3>;
+        if (line.startsWith("## ")) return <h2 key={i} style={{ color: "#fff", fontSize: 17, fontWeight: 700, margin: "20px 0 8px", fontFamily: "'Space Mono', monospace" }}>{line.slice(3)}</h2>;
+        if (line.startsWith("# ")) return <h1 key={i} style={{ color: "#fff", fontSize: 20, fontWeight: 700, margin: "22px 0 10px", fontFamily: "'Space Mono', monospace" }}>{line.slice(2)}</h1>;
+        if (line.startsWith("- ") || line.startsWith("• ")) return <div key={i} style={{ display: "flex", gap: 8, marginBottom: 3, paddingLeft: 8 }}><span style={{ color: G }}>▸</span><span dangerouslySetInnerHTML={{ __html: boldify(line.slice(2)) }} /></div>;
+        if (line.startsWith("---")) return <hr key={i} style={{ border: "none", borderTop: `1px solid ${BORDER}`, margin: "12px 0" }} />;
+        if (!line.trim()) return <div key={i} style={{ height: 6 }} />;
+        return <p key={i} style={{ margin: "3px 0" }} dangerouslySetInnerHTML={{ __html: boldify(line) }} />;
       })}
     </div>
   );
 }
-function boldify(t) {
-  return t.replace(/\*\*(.*?)\*\*/g, `<strong style="color:#fff;font-weight:600">$1</strong>`);
-}
+function boldify(t) { return t.replace(/\*\*(.*?)\*\*/g, `<strong style="color:#fff;font-weight:600">$1</strong>`); }
 
-// ─── Shared Components ───
-function TextArea({ value, onChange, placeholder, rows = 8 }) {
+// ─── Chat Message ───
+function ChatMessage({ msg }) {
+  const isUser = msg.role === "user";
   return (
-    <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows}
-      style={{ width: "100%", background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 10, color: "#fff", padding: "14px 16px", fontSize: 14, fontFamily: "'DM Sans', sans-serif", resize: "vertical", outline: "none", transition: "border-color 0.2s", boxSizing: "border-box" }}
-      onFocus={(e) => (e.target.style.borderColor = G)} onBlur={(e) => (e.target.style.borderColor = BORDER)} />
-  );
-}
-
-function Input({ value, onChange, placeholder, style: extraStyle = {} }) {
-  return (
-    <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
-      style={{ flex: 1, background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 8, color: "#fff", padding: "10px 14px", fontSize: 14, fontFamily: "'DM Sans', sans-serif", outline: "none", ...extraStyle }}
-      onFocus={(e) => (e.target.style.borderColor = G)} onBlur={(e) => (e.target.style.borderColor = BORDER)} />
-  );
-}
-
-function Btn({ onClick, loading, children, variant = "primary", disabled }) {
-  const p = variant === "primary";
-  return (
-    <button onClick={onClick} disabled={loading || disabled}
-      style={{ padding: "12px 28px", background: p ? G : "transparent", color: p ? "#000" : G, border: p ? "none" : `1px solid ${G}`, borderRadius: 8, fontWeight: 700, fontSize: 14, fontFamily: "'Space Mono', monospace", cursor: loading || disabled ? "not-allowed" : "pointer", opacity: loading || disabled ? 0.5 : 1, transition: "all 0.2s", letterSpacing: "0.5px", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 8 }}>
-      {loading && <span style={{ width: 16, height: 16, border: "2px solid rgba(0,0,0,0.2)", borderTopColor: "#000", borderRadius: "50%", display: "inline-block", animation: "spin 0.6s linear infinite" }} />}
-      {children}
-    </button>
-  );
-}
-
-function ResultBox({ result, title }) {
-  if (!result) return null;
-  return (
-    <div style={{ marginTop: 24, padding: 24, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, borderLeft: `3px solid ${G}`, animation: "fadeIn 0.4s ease" }}>
-      {title && <div style={{ fontSize: 11, fontFamily: "'Space Mono', monospace", color: G, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12 }}>{title}</div>}
-      <RichText text={result} />
+    <div style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom: 14, animation: "fadeIn 0.3s ease" }}>
+      <div style={{
+        maxWidth: isUser ? "75%" : "92%",
+        padding: isUser ? "11px 15px" : "18px 22px",
+        borderRadius: isUser ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
+        background: isUser ? `${G}15` : CARD,
+        border: `1px solid ${isUser ? `${G}28` : BORDER}`,
+        borderLeft: isUser ? undefined : `3px solid ${G}`,
+      }}>
+        {isUser ? (
+          <>
+            {msg.fileName && <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, padding: "5px 9px", background: `${G}10`, borderRadius: 6, fontSize: 12, color: G }}>📄 {msg.fileName}</div>}
+            <div style={{ color: TEXT, fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{msg.displayText || msg.content}</div>
+          </>
+        ) : <RichText text={msg.content} />}
+      </div>
     </div>
   );
 }
 
-function ToolHeader({ icon, title, subtitle }) {
+// ─── Loading Indicator ───
+function LoadingBubble() {
   return (
-    <div style={{ marginBottom: 24 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
-        <span style={{ fontSize: 28 }}>{icon}</span>
-        <h2 style={{ fontSize: 22, fontWeight: 700, color: "#fff", fontFamily: "'Space Mono', monospace", margin: 0 }}>{title}</h2>
-      </div>
-      <p style={{ color: MUTED, fontSize: 14, margin: 0, paddingLeft: 42 }}>{subtitle}</p>
-    </div>
-  );
-}
-
-// ─── TOOL 1: Brief Analyzer ───
-function BriefAnalyzer() {
-  const [brief, setBrief] = useState("");
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [result, setResult] = useState("");
-  const [loading, setLoading] = useState(false);
-  const analyze = async () => {
-    setLoading(true); setResult("");
-    const sys = `Sei un senior strategist di SBAM, agenzia creativa part of JAKALA. Analizzi brief di clienti con occhio critico e costruttivo.\nRispondi SEMPRE in italiano. Usa questo formato:\n\n## Sintesi del Brief\n(riassumi in 2-3 righe l'essenza della richiesta)\n\n## Insight Chiave\n(3-5 insight strategici che emergono dal brief)\n\n## Gap & Domande Critiche\n(cosa manca nel brief? quali informazioni servono?)\n\n## Opportunità Nascoste\n(cosa il cliente non ha chiesto ma potrebbe volere)\n\n## Red Flags\n(potenziali rischi o ambiguità da chiarire subito)\n\n## Prossimi Step Consigliati\n(azioni concrete per procedere)\n\nSii diretto, concreto, e usa il linguaggio tipico di un'agenzia creativa italiana top.`;
-
-    let userMsg = "Analizza questo brief cliente:\n\n";
-    if (uploadedFile?.extractedText) userMsg += `[Contenuto del file "${uploadedFile.fileName}"]\n${uploadedFile.extractedText}\n\n`;
-    if (brief.trim()) userMsg += brief;
-
-    const res = await callAI(sys, userMsg);
-    setResult(res); setLoading(false);
-  };
-  const hasContent = brief.trim() || uploadedFile;
-  return (
-    <div>
-      <ToolHeader icon="🔍" title="Brief Analyzer" subtitle="Carica un brief (PDF o testo) → estrai insight, gap e domande chiave" />
-      <FileUpload uploadedFile={uploadedFile} onFileReady={setUploadedFile} onClear={() => setUploadedFile(null)} />
-      <TextArea value={brief} onChange={setBrief} placeholder={uploadedFile ? "Aggiungi note o contesto aggiuntivo (opzionale)..." : "Oppure incolla qui il brief del cliente..."} rows={uploadedFile ? 4 : 10} />
-      <div style={{ marginTop: 16, display: "flex", gap: 12 }}>
-        <Btn onClick={analyze} loading={loading} disabled={!hasContent}>Analizza Brief</Btn>
-        {hasContent && <Btn variant="secondary" onClick={() => { setBrief(""); setResult(""); setUploadedFile(null); }}>Reset</Btn>}
-      </div>
-      <ResultBox result={result} title="Analisi del Brief" />
-    </div>
-  );
-}
-
-// ─── TOOL 2: Strategy Generator ───
-function StrategyGenerator() {
-  const [brief, setBrief] = useState("");
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [industry, setIndustry] = useState("");
-  const [budget, setBudget] = useState("");
-  const [result, setResult] = useState("");
-  const [loading, setLoading] = useState(false);
-  const generate = async () => {
-    setLoading(true); setResult("");
-    const sys = `Sei il Chief Strategy Officer di SBAM (part of JAKALA). Generi proposte strategiche complete partendo da brief.\nRispondi SEMPRE in italiano. Il tuo approccio è "Radical Simplicity": idee semplici, forti, che fanno parlare.\n\nUsa questo formato:\n\n## Executive Summary\n(la strategia in 3 righe)\n\n## Target Audience\n### Primario\n(descrizione dettagliata, insight comportamentali)\n### Secondario\n(audience secondaria)\n\n## Posizionamento & Tone of Voice\n(come il brand deve posizionarsi e parlare)\n\n## Strategia Canali\n(quali canali usare e perché, con priorità)\n\n## Big Idea\n(il concept creativo centrale — simple & loud)\n\n## Pillar di Comunicazione\n(3-4 pillar tematici su cui costruire i contenuti)\n\n## KPI Suggeriti\n(metriche concrete per misurare il successo)\n\n## Timeline Indicativa\n(macro fasi del progetto)\n\nSii ambizioso ma realistico. Pensa come un'agenzia che deve vincere la gara.`;
-
-    let userMsg = "";
-    if (uploadedFile?.extractedText) userMsg += `[Contenuto del file "${uploadedFile.fileName}"]\n${uploadedFile.extractedText}\n\n`;
-    if (brief.trim()) userMsg += `Brief: ${brief}\n`;
-    if (industry) userMsg += `Settore: ${industry}\n`;
-    if (budget) userMsg += `Budget indicativo: ${budget}\n`;
-
-    const res = await callAI(sys, userMsg);
-    setResult(res); setLoading(false);
-  };
-  const hasContent = brief.trim() || uploadedFile;
-  return (
-    <div>
-      <ToolHeader icon="🎯" title="Strategy Generator" subtitle="Dal brief alla proposta strategica con target, tone of voice e canali" />
-      <FileUpload uploadedFile={uploadedFile} onFileReady={setUploadedFile} onClear={() => setUploadedFile(null)} />
-      <TextArea value={brief} onChange={setBrief} placeholder={uploadedFile ? "Aggiungi contesto o indicazioni aggiuntive..." : "Inserisci il brief o il contesto del progetto..."} rows={uploadedFile ? 4 : 8} />
-      <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
-        <Input value={industry} onChange={setIndustry} placeholder="Settore (es. Fashion, Food...)" />
-        <Input value={budget} onChange={setBudget} placeholder="Budget (opzionale)" />
-      </div>
-      <div style={{ marginTop: 16 }}>
-        <Btn onClick={generate} loading={loading} disabled={!hasContent}>Genera Strategia</Btn>
-      </div>
-      <ResultBox result={result} title="Proposta Strategica" />
-    </div>
-  );
-}
-
-// ─── TOOL 3: Competitor & Trend Scanner ───
-function CompetitorScanner() {
-  const [brand, setBrand] = useState("");
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [competitors, setCompetitors] = useState("");
-  const [sector, setSector] = useState("");
-  const [result, setResult] = useState("");
-  const [loading, setLoading] = useState(false);
-  const scan = async () => {
-    setLoading(true); setResult("");
-    const sys = `Sei un senior strategist di SBAM specializzato in competitive intelligence e trend analysis per il mercato italiano ed europeo.\nRispondi SEMPRE in italiano. Analizza il panorama competitivo e i trend rilevanti.\n\nUsa questo formato:\n\n## Overview del Mercato\n(contesto e dinamiche principali del settore)\n\n## Analisi Competitor\n(per ogni competitor: posizionamento, punti di forza, debolezze, strategia di comunicazione)\n\n## Trend Rilevanti\n### Macro Trend\n(trend di settore a livello macro)\n### Micro Trend\n(trend emergenti e nicchie da esplorare)\n### Trend Social & Content\n(cosa funziona in comunicazione nel settore)\n\n## White Space & Opportunità\n(dove i competitor non sono presenti? dove c'è spazio?)\n\n## Minacce\n(rischi competitivi da monitorare)\n\n## Raccomandazioni per il Brand\n(come differenziarsi concretamente)\n\nBasa la tua analisi sulla tua conoscenza del mercato. Sii specifico e azionabile.`;
-
-    let userMsg = "";
-    if (uploadedFile?.extractedText) userMsg += `[Contenuto del file "${uploadedFile.fileName}"]\n${uploadedFile.extractedText}\n\n`;
-    userMsg += `Brand/Azienda: ${brand}\n`;
-    if (competitors) userMsg += `Competitor principali: ${competitors}\n`;
-    if (sector) userMsg += `Settore: ${sector}\n`;
-
-    const res = await callAI(sys, userMsg);
-    setResult(res); setLoading(false);
-  };
-  return (
-    <div>
-      <ToolHeader icon="📡" title="Competitor & Trend Scanner" subtitle="Analisi competitor e trend di settore dal brief" />
-      <FileUpload uploadedFile={uploadedFile} onFileReady={setUploadedFile} onClear={() => setUploadedFile(null)} />
-      <Input value={brand} onChange={setBrand} placeholder="Brand o azienda da analizzare" style={{ width: "100%", marginBottom: 12, flex: "none" }} />
-      <div style={{ display: "flex", gap: 12 }}>
-        <Input value={competitors} onChange={setCompetitors} placeholder="Competitor noti (opzionale)" />
-        <Input value={sector} onChange={setSector} placeholder="Settore" />
-      </div>
-      <div style={{ marginTop: 16 }}>
-        <Btn onClick={scan} loading={loading} disabled={!brand.trim()}>Scansiona Mercato</Btn>
-      </div>
-      <ResultBox result={result} title="Analisi Competitiva & Trend" />
-    </div>
-  );
-}
-
-// ─── TOOL 4: Creative Concept Generator ───
-function CreativeConceptGen() {
-  const [strategy, setStrategy] = useState("");
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [constraints, setConstraints] = useState("");
-  const [numConcepts, setNumConcepts] = useState("3");
-  const [result, setResult] = useState("");
-  const [loading, setLoading] = useState(false);
-  const generate = async () => {
-    setLoading(true); setResult("");
-    const sys = `Sei il Chief Creative Officer di SBAM. Generi concept creativi brillanti, semplici e impattanti, seguendo la filosofia "Radical Simplicity".\nRispondi SEMPRE in italiano. Genera ${numConcepts} concept creativi distinti. Per ciascuno usa questo formato:\n\n### Concept [N]: [Nome del Concept]\n\n**La Big Idea in una frase**\n(il concept sintetizzato in modo memorabile)\n\n**Insight di partenza**\n(l'insight umano/culturale su cui si basa)\n\n**Esecuzione**\n(come prende vita concretamente: canali, formati, meccaniche)\n\n**Headline/Claim**\n(proposta di headline o claim principale)\n\n**Tono**\n(registro comunicativo)\n\n**Perché funziona**\n(motivazione strategica)\n\n---\n\nSii audace, sorprendente, culturalmente rilevante. I concept devono essere "simple & loud" — facili da capire, impossibili da ignorare.`;
-
-    let userMsg = "Strategia/Brief di partenza:\n";
-    if (uploadedFile?.extractedText) userMsg += `[Contenuto del file "${uploadedFile.fileName}"]\n${uploadedFile.extractedText}\n\n`;
-    if (strategy.trim()) userMsg += strategy;
-    if (constraints) userMsg += `\n\nVincoli/Note: ${constraints}`;
-
-    const res = await callAI(sys, userMsg);
-    setResult(res); setLoading(false);
-  };
-  const hasContent = strategy.trim() || uploadedFile;
-  return (
-    <div>
-      <ToolHeader icon="💡" title="Creative Concept Generator" subtitle="Genera concept creativi a partire dalla strategia — Simple & Loud" />
-      <FileUpload uploadedFile={uploadedFile} onFileReady={setUploadedFile} onClear={() => setUploadedFile(null)} />
-      <TextArea value={strategy} onChange={setStrategy} placeholder={uploadedFile ? "Aggiungi indicazioni o contesto aggiuntivo..." : "Incolla la strategia o il brief su cui generare i concept..."} rows={uploadedFile ? 4 : 8} />
-      <div style={{ display: "flex", gap: 12, marginTop: 12, alignItems: "center" }}>
-        <Input value={constraints} onChange={setConstraints} placeholder="Vincoli o note aggiuntive (opzionale)" />
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ color: MUTED, fontSize: 13, fontFamily: "'Space Mono', monospace", whiteSpace: "nowrap" }}>N° concept:</span>
-          <select value={numConcepts} onChange={(e) => setNumConcepts(e.target.value)}
-            style={{ background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 8, color: "#fff", padding: "10px 12px", fontSize: 14, fontFamily: "'DM Sans', sans-serif", outline: "none", cursor: "pointer" }}>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-          </select>
+    <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 14 }}>
+      <div style={{ padding: "14px 20px", borderRadius: "14px 14px 14px 4px", background: CARD, border: `1px solid ${BORDER}`, borderLeft: `3px solid ${G}` }}>
+        <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+          {[0, 0.15, 0.3].map((d, i) => <span key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: G, animation: `pulse 1s ease-in-out ${d}s infinite` }} />)}
+          <span style={{ color: MUTED, fontSize: 11, marginLeft: 6, fontFamily: "'Space Mono', monospace" }}>Sto elaborando...</span>
         </div>
       </div>
-      <div style={{ marginTop: 16 }}>
-        <Btn onClick={generate} loading={loading} disabled={!hasContent}>Genera Concept</Btn>
+    </div>
+  );
+}
+
+// ─── Chat Tool (universal for all 4 tools) ───
+function ChatTool({ toolId, initialContent, onSendToTool }) {
+  const config = TOOL_CONFIG[toolId];
+  const systemPrompt = SYSTEM_PROMPTS[toolId];
+
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [uploadedFile, setUploadedFile] = useState(null);
+  const [processingFile, setProcessingFile] = useState(false);
+  const chatEndRef = useRef(null);
+  const inputRef = useRef(null);
+
+  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
+
+  // Handle pipeline: if this tool receives content from another tool, auto-send it
+  useEffect(() => {
+    if (initialContent && messages.length === 0) {
+      const msg = { role: "user", content: `Ecco l'output del tool precedente su cui lavorare:\n\n${initialContent}`, displayText: "(Output ricevuto dal tool precedente — vedi sotto)", fileName: null };
+      const newMsgs = [msg];
+      setMessages(newMsgs);
+      setLoading(true);
+      callAI(systemPrompt, newMsgs.map(m => ({ role: m.role, content: m.content }))).then(reply => {
+        setMessages([...newMsgs, { role: "assistant", content: reply }]);
+        setLoading(false);
+      });
+    }
+  }, [initialContent]);
+
+  const handleFile = async (file) => {
+    if (!file) return;
+    setProcessingFile(true);
+    try {
+      if (file.size > 50 * 1024 * 1024) { alert("File troppo grande (max 50 MB)"); setProcessingFile(false); return; }
+      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+      let text;
+      if (isPdf) {
+        text = await extractPdfText(file);
+        if (text.trim().length < 50) alert("Il PDF sembra contenere principalmente immagini.");
+      } else {
+        text = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsText(file); });
+      }
+      setUploadedFile({ name: file.name, text, size: file.size });
+    } catch { alert("Errore nella lettura del file."); }
+    setProcessingFile(false);
+  };
+
+  const send = async () => {
+    const trimmed = input.trim();
+    if (!trimmed && !uploadedFile) return;
+
+    let fullContent = "";
+    let displayText = trimmed;
+    let fileName = null;
+    if (uploadedFile) { fullContent += `[Contenuto del file "${uploadedFile.name}"]\n${uploadedFile.text}\n\n`; fileName = uploadedFile.name; }
+    if (trimmed) fullContent += trimmed;
+
+    const userMsg = { role: "user", content: fullContent, displayText, fileName };
+    const newMessages = [...messages, userMsg];
+    setMessages(newMessages);
+    setInput(""); setUploadedFile(null); setLoading(true);
+
+    const apiMessages = newMessages.map(m => ({ role: m.role, content: m.content }));
+    const reply = await callAI(systemPrompt, apiMessages);
+    setMessages([...newMessages, { role: "assistant", content: reply }]);
+    setLoading(false);
+    inputRef.current?.focus();
+  };
+
+  const handleKeyDown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
+
+  const lastAssistantMsg = [...messages].reverse().find(m => m.role === "assistant");
+  const pipeline = { brief: [{ id: "strategy", label: "Genera Strategia", icon: "🎯" }, { id: "competitor", label: "Scansiona Competitor", icon: "📡" }], strategy: [{ id: "creative", label: "Genera Concept", icon: "💡" }], competitor: [{ id: "strategy", label: "Genera Strategia", icon: "🎯" }], creative: [] };
+  const formatSize = (b) => b < 1024 ? b + " B" : b < 1048576 ? (b / 1024).toFixed(1) + " KB" : (b / 1048576).toFixed(1) + " MB";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 20px)", maxWidth: 840, margin: "0 auto" }}>
+      {/* Header */}
+      <div style={{ padding: "12px 0 10px", borderBottom: `1px solid ${BORDER}`, marginBottom: 4, flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ fontSize: 22 }}>{config.icon}</span>
+        <div style={{ flex: 1 }}>
+          <h2 style={{ fontSize: 16, fontWeight: 700, color: "#fff", fontFamily: "'Space Mono', monospace", margin: 0 }}>{config.title}</h2>
+          <p style={{ color: MUTED, fontSize: 11, margin: 0 }}>{config.subtitle}</p>
+        </div>
+        {messages.length > 0 && (
+          <button onClick={() => { setMessages([]); setUploadedFile(null); setInput(""); }}
+            style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 6, color: MUTED, cursor: "pointer", padding: "4px 10px", fontSize: 10, fontFamily: "'Space Mono', monospace" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "#fff"; e.currentTarget.style.color = "#fff"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}
+          >Nuova sessione</button>
+        )}
       </div>
-      <ResultBox result={result} title="Concept Creativi" />
+
+      {/* Chat Area */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "10px 0" }}>
+        {messages.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "50px 20px" }}>
+            <div style={{ fontSize: 44, marginBottom: 14 }}>{config.icon}</div>
+            <p style={{ color: MUTED, fontSize: 14, maxWidth: 420, margin: "0 auto 20px", lineHeight: 1.6 }}>{config.welcome}</p>
+            <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
+              {config.starters.map(q => (
+                <button key={q} onClick={() => setInput(q)}
+                  style={{ padding: "7px 13px", background: `${G}08`, border: `1px solid ${G}20`, borderRadius: 18, color: G, fontSize: 12, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}
+                  onMouseEnter={e => e.currentTarget.style.background = `${G}18`}
+                  onMouseLeave={e => e.currentTarget.style.background = `${G}08`}
+                >{q}</button>
+              ))}
+            </div>
+          </div>
+        ) : (
+          <>
+            {messages.map((msg, i) => <ChatMessage key={i} msg={msg} />)}
+            {loading && <LoadingBubble />}
+          </>
+        )}
+
+        {/* Pipeline buttons */}
+        {lastAssistantMsg && !loading && pipeline[toolId]?.length > 0 && (
+          <div style={{ padding: "10px 0 6px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+            <span style={{ color: MUTED, fontSize: 10, fontFamily: "'Space Mono', monospace" }}>PROSEGUI CON →</span>
+            {pipeline[toolId].map(t => (
+              <button key={t.id} onClick={() => onSendToTool(t.id, lastAssistantMsg.content)}
+                style={{ padding: "6px 12px", background: `${G}08`, border: `1px solid ${G}25`, borderRadius: 7, color: G, fontSize: 11, cursor: "pointer", fontFamily: "'Space Mono', monospace", transition: "all 0.15s", display: "flex", alignItems: "center", gap: 5 }}
+                onMouseEnter={e => { e.currentTarget.style.background = `${G}18`; e.currentTarget.style.borderColor = G; }}
+                onMouseLeave={e => { e.currentTarget.style.background = `${G}08`; e.currentTarget.style.borderColor = `${G}25`; }}
+              >{t.icon} {t.label} →</button>
+            ))}
+          </div>
+        )}
+        <div ref={chatEndRef} />
+      </div>
+
+      {/* Input */}
+      <div style={{ flexShrink: 0, borderTop: `1px solid ${BORDER}`, padding: "10px 0 6px" }}>
+        {uploadedFile && (
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: `${G}08`, border: `1px solid ${G}20`, borderRadius: 7, marginBottom: 8, fontSize: 12 }}>
+            <span>📄</span>
+            <span style={{ color: "#fff", flex: 1 }}>{uploadedFile.name} <span style={{ color: MUTED }}>({formatSize(uploadedFile.size)})</span></span>
+            <button onClick={() => setUploadedFile(null)} style={{ background: "none", border: "none", color: MUTED, cursor: "pointer" }}>✕</button>
+          </div>
+        )}
+        <div style={{ display: "flex", gap: 7, alignItems: "flex-end" }}>
+          <label style={{ cursor: "pointer", padding: "9px 11px", background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 9, display: "flex", alignItems: "center", flexShrink: 0, transition: "border-color 0.15s" }}
+            onMouseEnter={e => e.currentTarget.style.borderColor = G}
+            onMouseLeave={e => e.currentTarget.style.borderColor = BORDER}>
+            <input type="file" accept=".pdf,.txt,.md,.csv,.doc,.docx,.pptx" style={{ display: "none" }} onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ""; }} />
+            {processingFile ? <span style={{ width: 16, height: 16, border: `2px solid ${G}40`, borderTopColor: G, borderRadius: "50%", display: "block", animation: "spin 0.6s linear infinite" }} /> : <span style={{ fontSize: 16 }}>📎</span>}
+          </label>
+          <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
+            placeholder={messages.length === 0 ? "Descrivi il progetto o carica un file..." : "Chiedi di approfondire, modificare, esplorare..."}
+            rows={Math.min(input.split("\n").length, 4) || 1}
+            style={{ flex: 1, background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 9, color: "#fff", padding: "9px 13px", fontSize: 14, fontFamily: "'DM Sans', sans-serif", resize: "none", outline: "none", transition: "border-color 0.15s" }}
+            onFocus={e => e.target.style.borderColor = G} onBlur={e => e.target.style.borderColor = BORDER} />
+          <button onClick={send} disabled={loading || (!input.trim() && !uploadedFile)}
+            style={{ padding: "9px 14px", background: G, border: "none", borderRadius: 9, cursor: loading || (!input.trim() && !uploadedFile) ? "not-allowed" : "pointer", opacity: loading || (!input.trim() && !uploadedFile) ? 0.25 : 1, transition: "opacity 0.15s", display: "flex", alignItems: "center", flexShrink: 0 }}>
+            {loading ? <span style={{ width: 16, height: 16, border: "2px solid rgba(0,0,0,0.2)", borderTopColor: "#000", borderRadius: "50%", display: "block", animation: "spin 0.6s linear infinite" }} /> : <span style={{ fontSize: 16, color: "#000", fontWeight: 700 }}>↑</span>}
+          </button>
+        </div>
+        <div style={{ textAlign: "center", marginTop: 4 }}>
+          <span style={{ color: MUTED, fontSize: 9, fontFamily: "'Space Mono', monospace" }}>Shift+Enter per andare a capo · Enter per inviare</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -489,43 +343,48 @@ const TOOLS = [
   { id: "creative", label: "Concept Gen", icon: "💡" },
 ];
 
-// ─── Home Page ───
+// ─── Home ───
 function Home({ onNavigate }) {
   const cards = [
-    { id: "brief", icon: "🔍", title: "Brief Analyzer", desc: "Analizza brief clienti, estrai insight strategici, identifica gap e domande chiave.", tag: "ANALYSIS" },
-    { id: "strategy", icon: "🎯", title: "Strategy Generator", desc: "Dal brief alla proposta strategica completa: target, posizionamento, canali, KPI.", tag: "STRATEGY" },
-    { id: "competitor", icon: "📡", title: "Competitor & Trend Scanner", desc: "Scansiona il mercato: analisi competitor, trend emergenti, white space.", tag: "INTELLIGENCE" },
-    { id: "creative", icon: "💡", title: "Creative Concept Generator", desc: "Genera concept creativi Simple & Loud a partire dalla strategia.", tag: "CREATIVE" },
+    { id: "brief", icon: "🔍", title: "Brief Analyzer", desc: "Analizza brief in una conversazione guidata. Carica un PDF, esplora insight, affina l'analisi.", tag: "ANALYSIS" },
+    { id: "strategy", icon: "🎯", title: "Strategy Generator", desc: "Costruisci la strategia insieme all'AI. Target, canali, big idea — itera fino alla perfezione.", tag: "STRATEGY" },
+    { id: "competitor", icon: "📡", title: "Trend Scanner", desc: "Esplora il mercato in profondità. Competitor, trend, white space — approfondisci con domande.", tag: "INTELLIGENCE" },
+    { id: "creative", icon: "💡", title: "Concept Generator", desc: "Genera concept Simple & Loud. Sviluppali, cambiali, affinali attraverso il dialogo.", tag: "CREATIVE" },
   ];
   return (
-    <div style={{ maxWidth: 900, margin: "0 auto" }}>
-      <div style={{ textAlign: "center", padding: "60px 20px 50px", position: "relative" }}>
-        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 400, height: 400, background: `radial-gradient(circle, ${G}08 0%, transparent 70%)`, pointerEvents: "none" }} />
-        <div style={{ fontSize: 11, fontFamily: "'Space Mono', monospace", color: G, letterSpacing: 4, textTransform: "uppercase", marginBottom: 20 }}>AI-Powered Creative Suite</div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 16 }}>
-          <img src="/logo.png" alt="SBAM" style={{ height: 52, objectFit: "contain" }} />
-          <span style={{ fontSize: 48, fontWeight: 800, color: G, fontFamily: "'Space Mono', monospace", opacity: 0.6 }}>.ai</span>
+    <div style={{ maxWidth: 880, margin: "0 auto" }}>
+      <div style={{ textAlign: "center", padding: "55px 20px 45px", position: "relative" }}>
+        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 380, height: 380, background: `radial-gradient(circle, ${G}08 0%, transparent 70%)`, pointerEvents: "none" }} />
+        <div style={{ fontSize: 10, fontFamily: "'Space Mono', monospace", color: G, letterSpacing: 4, textTransform: "uppercase", marginBottom: 18 }}>AI-Powered Creative Suite</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 14 }}>
+          <img src="/logo.png" alt="SBAM" style={{ height: 48, objectFit: "contain" }} />
+          <span style={{ fontSize: 44, fontWeight: 800, color: G, fontFamily: "'Space Mono', monospace", opacity: 0.55 }}>.ai</span>
         </div>
-        <p style={{ fontSize: 18, color: MUTED, maxWidth: 500, margin: "0 auto 8px", lineHeight: 1.6, fontFamily: "'DM Sans', sans-serif" }}>La suite AI interna per il team SBAM.</p>
-        <p style={{ fontSize: 15, color: MUTED, maxWidth: 500, margin: "0 auto", fontFamily: "'DM Sans', sans-serif", fontStyle: "italic" }}>Radical Simplicity, superpowered by AI.</p>
+        <p style={{ fontSize: 16, color: MUTED, maxWidth: 460, margin: "0 auto 6px", lineHeight: 1.6, fontFamily: "'DM Sans', sans-serif" }}>La suite AI interna per il team SBAM.</p>
+        <p style={{ fontSize: 14, color: MUTED, maxWidth: 460, margin: "0 auto", fontFamily: "'DM Sans', sans-serif", fontStyle: "italic" }}>Radical Simplicity, superpowered by AI.</p>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 28, padding: "10px 16px", background: `${G}06`, borderRadius: 10, maxWidth: 440, margin: "28px auto 0" }}>
+          <span style={{ fontSize: 10, fontFamily: "'Space Mono', monospace", color: G }}>WORKFLOW</span>
+          <span style={{ color: MUTED, fontSize: 10 }}>│</span>
+          {["🔍", "🎯", "📡", "💡"].map((e, i) => <span key={i}><span style={{ fontSize: 12 }}>{e}</span>{i < 3 && <span style={{ color: MUTED, fontSize: 10, margin: "0 2px" }}>→</span>}</span>)}
+          <span style={{ color: MUTED, fontSize: 10 }}>│</span>
+          <span style={{ fontSize: 10, color: MUTED, fontFamily: "'Space Mono', monospace" }}>Brief → Strategy → Concept</span>
+        </div>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16, padding: "0 20px" }}>
-        {cards.map((card) => (
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, padding: "0 20px" }}>
+        {cards.map(card => (
           <div key={card.id} onClick={() => onNavigate(card.id)}
-            style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 28, cursor: "pointer", transition: "all 0.25s ease", position: "relative", overflow: "hidden" }}
-            onMouseEnter={(e) => { e.currentTarget.style.borderColor = G; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = `0 8px 30px ${G}15`; }}
-            onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}>
-            <div style={{ fontSize: 10, fontFamily: "'Space Mono', monospace", color: G, letterSpacing: 2, marginBottom: 14 }}>{card.tag}</div>
-            <div style={{ fontSize: 30, marginBottom: 12 }}>{card.icon}</div>
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: "0 0 8px", fontFamily: "'Space Mono', monospace" }}>{card.title}</h3>
-            <p style={{ fontSize: 13, color: MUTED, margin: 0, lineHeight: 1.5 }}>{card.desc}</p>
-            <div style={{ position: "absolute", bottom: 16, right: 20, color: G, fontSize: 20, opacity: 0.5 }}>→</div>
+            style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 13, padding: 24, cursor: "pointer", transition: "all 0.25s ease", position: "relative" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = G; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = `0 6px 24px ${G}12`; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}>
+            <div style={{ fontSize: 9, fontFamily: "'Space Mono', monospace", color: G, letterSpacing: 2, marginBottom: 12 }}>{card.tag}</div>
+            <div style={{ fontSize: 28, marginBottom: 10 }}>{card.icon}</div>
+            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#fff", margin: "0 0 6px", fontFamily: "'Space Mono', monospace" }}>{card.title}</h3>
+            <p style={{ fontSize: 12, color: MUTED, margin: 0, lineHeight: 1.5 }}>{card.desc}</p>
+            <div style={{ position: "absolute", bottom: 14, right: 18, color: G, fontSize: 18, opacity: 0.4 }}>→</div>
           </div>
         ))}
       </div>
-      <div style={{ textAlign: "center", padding: "50px 20px 30px", color: MUTED, fontSize: 12, fontFamily: "'Space Mono', monospace" }}>
-        SBAM — Part of JAKALA · AI Suite Internal Tool · 2026
-      </div>
+      <div style={{ textAlign: "center", padding: "40px 20px 24px", color: MUTED, fontSize: 11, fontFamily: "'Space Mono', monospace" }}>SBAM — Part of JAKALA · AI Suite Internal Tool · 2026</div>
     </div>
   );
 }
@@ -534,70 +393,57 @@ function Home({ onNavigate }) {
 export default function Page() {
   const [activeTool, setActiveTool] = useState("home");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [pipelineData, setPipelineData] = useState({});
 
-  const renderTool = () => {
-    switch (activeTool) {
-      case "brief": return <BriefAnalyzer />;
-      case "strategy": return <StrategyGenerator />;
-      case "competitor": return <CompetitorScanner />;
-      case "creative": return <CreativeConceptGen />;
-      default: return <Home onNavigate={setActiveTool} />;
-    }
+  const handleSendToTool = (targetId, content) => {
+    setPipelineData(prev => ({ ...prev, [targetId]: content }));
+    setActiveTool(targetId);
   };
 
   return (
     <div style={{ display: "flex", height: "100vh", background: DARK, fontFamily: "'DM Sans', sans-serif", overflow: "hidden" }}>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500;600;700&display=swap');
+        @keyframes spin { to { transform: rotate(360deg); } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulse { 0%,100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }
+        * { box-sizing: border-box; }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: ${BORDER}; border-radius: 3px; }
+        ::selection { background: ${G}33; color: #fff; }
+      `}</style>
+
       {/* Sidebar */}
-      <div style={{ width: sidebarCollapsed ? 60 : 220, background: DARKER, borderRight: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", transition: "width 0.25s ease", flexShrink: 0 }}>
-        <div style={{ padding: sidebarCollapsed ? "20px 10px" : "20px 18px", borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 65 }}>
-          {!sidebarCollapsed && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <img src="/logo.png" alt="SBAM" style={{ height: 22, objectFit: "contain" }} />
-              <span style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, fontSize: 14, color: G, opacity: 0.7 }}>.ai</span>
-            </div>
-          )}
-          <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-            style={{ background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 16, padding: 4, display: "flex", margin: sidebarCollapsed ? "0 auto" : 0 }}>
-            {sidebarCollapsed ? "▶" : "◀"}
-          </button>
+      <div style={{ width: sidebarCollapsed ? 52 : 200, background: DARKER, borderRight: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", transition: "width 0.25s ease", flexShrink: 0 }}>
+        <div style={{ padding: sidebarCollapsed ? "14px 6px" : "14px 12px", borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 52 }}>
+          {!sidebarCollapsed && <div style={{ display: "flex", alignItems: "center", gap: 4 }}><img src="/logo.png" alt="SBAM" style={{ height: 18, objectFit: "contain" }} /><span style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, fontSize: 12, color: G, opacity: 0.65 }}>.ai</span></div>}
+          <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} style={{ background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 12, padding: 2, display: "flex", margin: sidebarCollapsed ? "0 auto" : 0 }}>{sidebarCollapsed ? "▶" : "◀"}</button>
         </div>
-        <nav style={{ flex: 1, padding: "12px 8px" }}>
-          {TOOLS.map((tool) => {
+        <nav style={{ flex: 1, padding: "8px 5px" }}>
+          {TOOLS.map(tool => {
             const active = activeTool === tool.id;
             return (
               <button key={tool.id} onClick={() => setActiveTool(tool.id)}
-                style={{
-                  width: "100%", display: "flex", alignItems: "center", gap: 10,
-                  padding: sidebarCollapsed ? "10px 0" : "10px 12px",
-                  justifyContent: sidebarCollapsed ? "center" : "flex-start",
-                  background: active ? `${G}12` : "transparent",
-                  border: "none", borderRadius: 8,
-                  color: active ? G : MUTED,
-                  cursor: "pointer", fontSize: 13, fontFamily: "'Space Mono', monospace",
-                  fontWeight: active ? 700 : 400, marginBottom: 4, transition: "all 0.15s",
-                  borderLeft: active ? `2px solid ${G}` : "2px solid transparent",
-                }}
-                onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = "#fff"; }}
-                onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = active ? G : MUTED; }}
+                style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: sidebarCollapsed ? "8px 0" : "8px 10px", justifyContent: sidebarCollapsed ? "center" : "flex-start", background: active ? `${G}12` : "transparent", border: "none", borderRadius: 6, color: active ? G : MUTED, cursor: "pointer", fontSize: 11, fontFamily: "'Space Mono', monospace", fontWeight: active ? 700 : 400, marginBottom: 2, transition: "all 0.15s", borderLeft: active ? `2px solid ${G}` : "2px solid transparent" }}
+                onMouseEnter={e => { if (!active) e.currentTarget.style.color = "#fff"; }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.color = active ? G : MUTED; }}
                 title={sidebarCollapsed ? tool.label : ""}>
-                <span style={{ fontSize: 16 }}>{tool.icon}</span>
+                <span style={{ fontSize: 14 }}>{tool.icon}</span>
                 {!sidebarCollapsed && <span>{tool.label}</span>}
               </button>
             );
           })}
         </nav>
-        {!sidebarCollapsed && (
-          <div style={{ padding: "16px 18px", borderTop: `1px solid ${BORDER}`, fontSize: 10, color: MUTED, fontFamily: "'Space Mono', monospace" }}>
-            Powered by Claude AI<br />Part of JAKALA
-          </div>
-        )}
+        {!sidebarCollapsed && <div style={{ padding: "10px 12px", borderTop: `1px solid ${BORDER}`, fontSize: 9, color: MUTED, fontFamily: "'Space Mono', monospace" }}>Powered by Claude AI<br />Part of JAKALA</div>}
       </div>
 
-      {/* Main Content */}
-      <div style={{ flex: 1, overflow: "auto", padding: activeTool === "home" ? 0 : "32px 40px" }}>
-        <div style={{ maxWidth: activeTool === "home" ? "100%" : 800, margin: "0 auto", animation: "fadeIn 0.3s ease" }}>
-          {renderTool()}
-        </div>
+      {/* Main */}
+      <div style={{ flex: 1, overflow: activeTool === "home" ? "auto" : "hidden", padding: activeTool === "home" ? 0 : "8px 20px" }}>
+        {activeTool === "home"
+          ? <Home onNavigate={setActiveTool} />
+          : <ChatTool key={activeTool + (pipelineData[activeTool] ? "-pipe" : "")} toolId={activeTool} initialContent={pipelineData[activeTool] || null} onSendToTool={handleSendToTool} />
+        }
       </div>
     </div>
   );
