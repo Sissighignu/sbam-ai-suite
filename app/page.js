@@ -9,143 +9,105 @@ const CARD = "#111111";
 const BORDER = "#1a1a1a";
 const MUTED = "#666666";
 const TEXT = "#e0e0e0";
+const GREEN = "#27ae60";
+const YELLOW = "#f39c12";
+const RED = "#e74c3c";
 
-// ─── SYSTEM PROMPTS (predisposti per knowledge base SBAM - Fase 3) ───
-const SBAM_CONTEXT = `Sei parte di SBAM, agenzia creativa part of JAKALA. La filosofia di SBAM è "Radical Simplicity": idee semplici, forti, che fanno parlare. Rispondi SEMPRE in italiano.`;
+const SYSTEM_PROMPT = `Sei il Pitch Screener di SBAM.ai — lo strumento interno di SBAM (agenzia creativa, part of JAKALA) per valutare le opportunità di gara.
 
-const SYSTEM_PROMPTS = {
-  pitch: `${SBAM_CONTEXT}
-Il tuo ruolo è aiutare il team a decidere se partecipare o meno a una gara (pitch). Valuti le opportunità in base alle regole interne di SBAM.
+IL TUO COMPITO:
+Analizzare le informazioni fornite dall'utente (brief di gara e/o testo con contesto aggiuntivo), mappare le informazioni sui 20 criteri di valutazione, e produrre un punteggio su 100 con raccomandazione go/no-go.
 
-REGOLE DI VALUTAZIONE SBAM:
+FILOSOFIA SBAM:
+La filosofia di SBAM è "Radical Simplicity". Non partecipare al maggior numero possibile di gare, ma selezionare con attenzione quelle giuste. Il costo medio di partecipazione a una gara per SBAM è di circa 13.000€, con picchi fino a 40.000€. Ogni gara a cui si partecipa sottrae risorse creative e organizzative al team.
 
-CRITERI ECONOMICI:
-- Soglia minima net revenue: 50.000€. Sotto questa soglia → semaforo GIALLO (non automaticamente rosso, ma richiede giustificazione strategica).
-- Se è previsto un rimborso spese per la partecipazione alla gara → forte segnale positivo, tendenzialmente cerchiamo di partecipare sempre.
-- Valuta l'adeguatezza del budget rispetto ai deliverable richiesti.
+FLUSSO DI LAVORO:
+1. ACCOGLIENZA: Se l'utente non ha ancora fornito informazioni, chiedi di caricare il brief e/o descrivere la gara.
+2. ANALISI SILENZIOSA: Leggi il materiale e mappa le informazioni sui 20 criteri. Per ogni criterio a cui riesci a rispondere, assegna Sì/No/Non so e annota la fonte.
+3. PRESENTAZIONE INTERMEDIA: Mostra all'utente quali criteri hai compilato e quali restano scoperti. Chiedi conferma.
+4. DOMANDE MIRATE: Poni domande SOLO per i criteri rimasti senza risposta. Raggruppa le domande per area. Sii diretto e conciso.
+5. OUTPUT FINALE: Calcola il punteggio e produce il report strutturato.
 
-CRITERI STRATEGICI:
-- Clienti multinazionali multibrand (es. Nestlé, Campari, P&G, Unilever, LVMH): anche se la gara specifica è piccola, può avere senso partecipare perché vincerla apre la porta a gare per altri brand del gruppo. Questo è un forte fattore positivo.
-- Potenziale a lungo termine: il cliente potrebbe diventare un account stabile?
-- Fit con il posizionamento SBAM: il progetto è coerente con "Radical Simplicity"?
-- Potenziale di portfolio/case study: il lavoro sarebbe mostrabile e prestigioso?
+IMPORTANTE SUL FLUSSO:
+- La quantità di domande deve essere inversamente proporzionale alla qualità dell'input
+- Se il brief è completo e il contesto è ricco, potresti non dover fare quasi nessuna domanda
+- Non chiedere MAI informazioni che puoi dedurre dal brief
+- Per i criteri a cui non riesci a rispondere e l'utente non sa rispondere, tratta come "Non so" (0.5x)
 
-CRITERI DI COMPETITIVITÀ:
-- Numero di agenzie invitate: più sono, più si diluisce la probabilità di vincita.
-- Presenza di un incumbent radicato → rischio di gara "di cortesia".
-- Se conosciamo i nomi delle altre agenzie in gara: è un'informazione molto preziosa. Agenzie troppo piccole/economiche rispetto a SBAM suggeriscono che il cliente cerca soluzioni low-cost. Agenzie di pari livello o superiori confermano che è una gara seria. Dare scoring più alto quando si conoscono i competitor.
-- Vantaggio competitivo SBAM: abbiamo esperienza nel settore? Relazioni? Competenze specifiche?
+SISTEMA DI SCORING — 3 MACRO-AREE, 20 CRITERI, 100 PUNTI:
 
-CRITERI DI FATTIBILITÀ:
-- Timeline della gara rispetto al carico attuale del team.
-- Peso dei deliverable richiesti sulla struttura (quante risorse servono? quanto tempo?).
-- Risorse necessarie vs disponibili.
+AREA A — COMMITMENT DEL CLIENTE (30 punti, 9 criteri, ~3.33 pt ciascuno):
+A1. Esiste una gara reale con budget già allocato?
+A2. Il cliente ha visto le credenziali di SBAM prima dell'invito?
+A3. I decisori finali saranno presenti al brief?
+A4. I decisori finali saranno presenti alla presentazione?
+A5. Il numero di agenzie partecipanti è dichiarato?
+A6. I nomi delle agenzie partecipanti sono dichiarati?
+A7. Il budget a disposizione è esplicitato?
+A8. È previsto un rimborso per le agenzie partecipanti?
+A9. Il cliente risponde alle domande chiave su processo e criteri?
 
-RED FLAGS:
-- Gara "di cortesia" (segnali: brief vago, incumbent molto radicato, tempistiche irrealistiche).
-- Brief irrealistico o ambiguo.
-- Condizioni contrattuali problematiche.
-- Troppe agenzie invitate (>5-6) senza rimborso.
+AREA B — COMPLETEZZA DELLE INFORMAZIONI (20 punti, 6 criteri, ~3.33 pt ciascuno):
+B1. Gli obiettivi della gara sono chiari?
+B2. L'output richiesto è chiaro e definito?
+B3. I criteri di valutazione delle proposte sono dichiarati?
+B4. L'effort richiesto è commisurato al tempo a disposizione?
+B5. Sono fornite indicazioni per la predisposizione del budget?
+B6. È possibile un confronto diretto col cliente per approfondimenti?
 
-FORMATO DI OUTPUT:
-Rispondi con un'analisi strutturata in questo formato:
+AREA C — OPPORTUNITÀ ECONOMICA (50 punti, 5 criteri, 10 pt ciascuno):
+C1. La net revenue stimata è superiore a 50.000€?
+C2. Il costo stimato di partecipazione è commisurato alla posta in gioco?
+C3. Le agenzie in gara sono massimo 4?
+C4. La durata contrattuale è pluriennale?
+C5. Le agenzie competitor sono di dimensioni e tipologia simili a SBAM?
 
-## 🔴/🟡/🟢 SEMAFORO: [ROSSO/GIALLO/VERDE]
+CALCOLO PUNTEGGIO:
+- Sì = 1.0x (punteggio pieno del criterio)
+- Non so = 0.5x (metà punteggio)
+- No = 0.0x (zero punti)
+- Punteggio Area = (Peso Area / N. Criteri) × Σ(moltiplicatore di ogni criterio)
+- Punteggio Totale = Punteggio A + Punteggio B + Punteggio C
 
-### Motivazione principale
-(in 2-3 righe, il motivo chiave della raccomandazione)
+FASCE SEMAFORO:
+- VERDE (75-100): GO — Gara solida, partecipare con convinzione.
+- GIALLO (50-74): VALUTARE — Opportunità con criticità, servono approfondimenti.
+- ROSSO (0-49): NO-GO — Rischio troppo alto, meglio declinare.
 
-### Analisi per criteri
+Semaforo per singola area: stesse proporzioni (verde >75%, giallo 50-74%, rosso <50%).
 
-**Economico** [🔴/🟡/🟢]
-(valutazione del budget, revenue, rimborso)
+FORMATO OUTPUT FINALE (usa ESATTAMENTE questo formato quando hai tutte le info):
 
-**Strategico** [🔴/🟡/🟢]
-(fit con SBAM, potenziale futuro, prestigio)
+## [EMOJI] PUNTEGGIO: [X]/100 — [COLORE] ([ETICHETTA])
 
-**Competitivo** [🔴/🟡/🟢]
-(probabilità di vincita, posizionamento vs competitor)
+### Breakdown per area
+- **Commitment del Cliente**: [X]/30 [emoji semaforo]
+- **Completezza Informazioni**: [X]/20 [emoji semaforo]
+- **Opportunità Economica**: [X]/50 [emoji semaforo]
 
-**Fattibilità** [🔴/🟡/🟢]
-(risorse, timeline, peso sulla struttura)
-
-### Red Flags rilevate
-(elenco di eventuali segnali d'allarme, o "nessuna" se non ce ne sono)
+### Criteri critici
+[Elenco dei soli criteri con risposta No o Non so, con codice, descrizione e motivazione]
 
 ### Raccomandazione
-(GO / NO-GO / GO CON RISERVA — con condizioni specifiche)
+[Paragrafo di 3-5 righe con azione concreta]
 
-### Domande da chiarire prima di decidere
-(cosa manca per dare un giudizio definitivo)
+Dove:
+- [EMOJI]: 🟢 per verde, 🟡 per giallo, 🔴 per rosso
+- [COLORE]: VERDE, GIALLO, ROSSO
+- [ETICHETTA]: GO, VALUTARE, NO-GO
 
-Nelle risposte successive, approfondisci aspetti specifici, rivaluta in base a nuove informazioni, e aiuta il team a prendere la decisione migliore. Se l'utente fornisce i nomi delle agenzie competitor, analizzale e rivaluta lo scoring.`,
+TONO:
+- Professionale ma diretto, come un senior partner che parla al team
+- Mai prolisso: ogni frase deve aggiungere valore
+- Italiano
+- Quando fai domande, sii specifico e concreto`;
 
-  brief: `${SBAM_CONTEXT}
-Il tuo ruolo è analizzare brief di clienti con occhio critico e costruttivo, come un senior strategist.
-
-Quando ricevi un brief per la prima volta, analizzalo con questo formato:
-## Sintesi del Brief
-## Insight Chiave
-## Gap & Domande Critiche
-## Opportunità Nascoste
-## Red Flags
-## Prossimi Step Consigliati
-
-Nelle risposte successive, rispondi in modo conversazionale: approfondisci, riformula, esplora nuove direzioni. Mantieni sempre il contesto. Sii diretto e concreto.`,
-
-  strategy: `${SBAM_CONTEXT}
-Il tuo ruolo è Chief Strategy Officer. Generi proposte strategiche complete.
-
-Quando ricevi un brief per la prima volta, usa questo formato:
-## Executive Summary
-## Target Audience (Primario e Secondario)
-## Posizionamento & Tone of Voice
-## Strategia Canali
-## Big Idea
-## Pillar di Comunicazione
-## KPI Suggeriti
-## Timeline Indicativa
-
-Nelle risposte successive, approfondisci e raffina la strategia in base al feedback. Sii ambizioso ma realistico.`,
-
-  competitor: `${SBAM_CONTEXT}
-Il tuo ruolo è specialista in competitive intelligence e trend analysis per il mercato italiano ed europeo.
-
-Quando ricevi una richiesta per la prima volta, usa questo formato:
-## Overview del Mercato
-## Analisi Competitor
-## Trend Rilevanti (Macro, Micro, Social & Content)
-## White Space & Opportunità
-## Minacce
-## Raccomandazioni per il Brand
-
-Nelle risposte successive, approfondisci specifici competitor, trend o aspetti del mercato. Sii specifico e azionabile.`,
-
-  creative: `${SBAM_CONTEXT}
-Il tuo ruolo è Chief Creative Officer. Generi concept creativi Simple & Loud.
-
-Quando ricevi una richiesta per la prima volta, genera 3 concept creativi distinti con questo formato per ciascuno:
-### Concept [N]: [Nome]
-**Big Idea** · **Insight** · **Esecuzione** · **Headline/Claim** · **Tono** · **Perché funziona**
-
-Nelle risposte successive, sviluppa concept specifici, generane di nuovi, o affina in base al feedback. Sii audace e culturalmente rilevante.`,
-};
-
-const TOOL_CONFIG = {
-  pitch: { icon: "⚖️", title: "Pitch Screener", subtitle: "Valuta se accettare una gara — semaforo GO / NO-GO", tag: "SCREENING", welcome: "Descrivi la gara: cliente, budget, deliverable richiesti, timeline, numero agenzie invitate. Ti darò un semaforo con la raccomandazione.", starters: ["Il cliente offre un rimborso spese?", "È un grande gruppo multinazionale multibrand?", "Quante agenzie sono state invitate?"] },
-  brief: { icon: "🔍", title: "Brief Analyzer", subtitle: "Analizza brief in conversazione — approfondisci ogni aspetto", tag: "ANALYSIS", welcome: "Carica un brief (PDF) o descrivi il progetto. Analizzerò tutto e poi potrai chiedermi di approfondire qualsiasi aspetto.", starters: ["Analizza i punti deboli del brief", "Identifica il vero obiettivo del cliente", "Suggerisci domande da fare al cliente"] },
-  strategy: { icon: "🎯", title: "Strategy Generator", subtitle: "Costruisci la strategia insieme all'AI — itera ogni dettaglio", tag: "STRATEGY", welcome: "Condividi il brief o il contesto. Genererò una proposta strategica completa e potrai affinare ogni aspetto.", starters: ["Focalizzati sul target Gen Z", "Proponi una strategia digital-first", "Includi una fase di branded content"] },
-  competitor: { icon: "📡", title: "Competitor & Trend Scanner", subtitle: "Esplora il mercato in profondità — vai oltre la superficie", tag: "INTELLIGENCE", welcome: "Dimmi brand e settore. Mapperò competitor e trend, poi potrai esplorare in profondità.", starters: ["Analizza la comunicazione social dei competitor", "Identifica trend emergenti nel settore", "Trova white space non presidiati"] },
-  creative: { icon: "💡", title: "Creative Concept Generator", subtitle: "Genera concept e iterali fino alla perfezione", tag: "CREATIVE", welcome: "Condividi strategia o brief. Genererò concept creativi e potrai svilupparli, modificarli o esplorare nuove direzioni.", starters: ["Sviluppa di più il Concept 1", "Proponi un concept più provocatorio", "Genera concept per una campagna social-first"] },
-};
-
-// ─── API Call (multi-turn conversation) ───
-async function callAI(system, messages) {
+async function callAI(messages) {
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ system, messages }),
+      body: JSON.stringify({ system: SYSTEM_PROMPT, messages }),
     });
     const data = await res.json();
     if (data.error) return `Errore: ${data.error}`;
@@ -155,7 +117,6 @@ async function callAI(system, messages) {
   }
 }
 
-// ─── PDF Text Extraction (client-side) ───
 async function extractPdfText(file) {
   if (!window.pdfjsLib) {
     await new Promise((res, rej) => {
@@ -178,16 +139,28 @@ async function extractPdfText(file) {
   return pages.join("\n\n");
 }
 
-// ─── Rich Text Renderer ───
 function RichText({ text }) {
   if (!text) return null;
   return (
     <div style={{ lineHeight: 1.7, color: TEXT, fontSize: 14 }}>
       {text.split("\n").map((line, i) => {
         if (line.startsWith("### ")) return <h3 key={i} style={{ color: G, fontSize: 15, fontWeight: 700, margin: "16px 0 6px", fontFamily: "'Space Mono', monospace" }}>{line.slice(4)}</h3>;
-        if (line.startsWith("## ")) return <h2 key={i} style={{ color: "#fff", fontSize: 17, fontWeight: 700, margin: "20px 0 8px", fontFamily: "'Space Mono', monospace" }}>{line.slice(3)}</h2>;
+        if (line.startsWith("## ")) {
+          const hasScore = line.match(/🟢|🟡|🔴/);
+          if (hasScore) {
+            const color = line.includes("🟢") ? GREEN : line.includes("🟡") ? YELLOW : RED;
+            return <h2 key={i} style={{ color, fontSize: 20, fontWeight: 700, margin: "20px 0 10px", fontFamily: "'Space Mono', monospace", padding: "14px 18px", background: `${color}12`, borderRadius: 10, borderLeft: `4px solid ${color}` }}>{line.slice(3)}</h2>;
+          }
+          return <h2 key={i} style={{ color: "#fff", fontSize: 17, fontWeight: 700, margin: "20px 0 8px", fontFamily: "'Space Mono', monospace" }}>{line.slice(3)}</h2>;
+        }
         if (line.startsWith("# ")) return <h1 key={i} style={{ color: "#fff", fontSize: 20, fontWeight: 700, margin: "22px 0 10px", fontFamily: "'Space Mono', monospace" }}>{line.slice(2)}</h1>;
-        if (line.startsWith("- ") || line.startsWith("• ")) return <div key={i} style={{ display: "flex", gap: 8, marginBottom: 3, paddingLeft: 8 }}><span style={{ color: G }}>▸</span><span dangerouslySetInnerHTML={{ __html: boldify(line.slice(2)) }} /></div>;
+        if (line.startsWith("- ") || line.startsWith("• ")) {
+          const content = line.slice(2);
+          const hasRed = content.includes("(No)");
+          const hasYellow = content.includes("(Non so)");
+          const indicatorColor = hasRed ? RED : hasYellow ? YELLOW : G;
+          return <div key={i} style={{ display: "flex", gap: 8, marginBottom: 3, paddingLeft: 8 }}><span style={{ color: indicatorColor }}>▸</span><span dangerouslySetInnerHTML={{ __html: boldify(content) }} /></div>;
+        }
         if (line.startsWith("---")) return <hr key={i} style={{ border: "none", borderTop: `1px solid ${BORDER}`, margin: "12px 0" }} />;
         if (!line.trim()) return <div key={i} style={{ height: 6 }} />;
         return <p key={i} style={{ margin: "3px 0" }} dangerouslySetInnerHTML={{ __html: boldify(line) }} />;
@@ -197,7 +170,6 @@ function RichText({ text }) {
 }
 function boldify(t) { return t.replace(/\*\*(.*?)\*\*/g, `<strong style="color:#fff;font-weight:600">$1</strong>`); }
 
-// ─── Chat Message ───
 function ChatMessage({ msg }) {
   const isUser = msg.role === "user";
   return (
@@ -221,48 +193,30 @@ function ChatMessage({ msg }) {
   );
 }
 
-// ─── Loading Indicator ───
 function LoadingBubble() {
   return (
     <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 14 }}>
       <div style={{ padding: "14px 20px", borderRadius: "14px 14px 14px 4px", background: CARD, border: `1px solid ${BORDER}`, borderLeft: `3px solid ${G}` }}>
         <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
           {[0, 0.15, 0.3].map((d, i) => <span key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: G, animation: `pulse 1s ease-in-out ${d}s infinite` }} />)}
-          <span style={{ color: MUTED, fontSize: 11, marginLeft: 6, fontFamily: "'Space Mono', monospace" }}>Sto elaborando...</span>
+          <span style={{ color: MUTED, fontSize: 11, marginLeft: 6, fontFamily: "'Space Mono', monospace" }}>Sto analizzando...</span>
         </div>
       </div>
     </div>
   );
 }
 
-// ─── Chat Tool (universal for all 4 tools) ───
-function ChatTool({ toolId, initialContent, onSendToTool }) {
-  const config = TOOL_CONFIG[toolId];
-  const systemPrompt = SYSTEM_PROMPTS[toolId];
-
+export default function Page() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [uploadedFile, setUploadedFile] = useState(null);
   const [processingFile, setProcessingFile] = useState(false);
+  const [started, setStarted] = useState(false);
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
-
-  // Handle pipeline: if this tool receives content from another tool, auto-send it
-  useEffect(() => {
-    if (initialContent && messages.length === 0) {
-      const msg = { role: "user", content: `Ecco l'output del tool precedente su cui lavorare:\n\n${initialContent}`, displayText: "(Output ricevuto dal tool precedente — vedi sotto)", fileName: null };
-      const newMsgs = [msg];
-      setMessages(newMsgs);
-      setLoading(true);
-      callAI(systemPrompt, newMsgs.map(m => ({ role: m.role, content: m.content }))).then(reply => {
-        setMessages([...newMsgs, { role: "assistant", content: reply }]);
-        setLoading(false);
-      });
-    }
-  }, [initialContent]);
 
   const handleFile = async (file) => {
     if (!file) return;
@@ -273,7 +227,7 @@ function ChatTool({ toolId, initialContent, onSendToTool }) {
       let text;
       if (isPdf) {
         text = await extractPdfText(file);
-        if (text.trim().length < 50) alert("Il PDF sembra contenere principalmente immagini.");
+        if (text.trim().length < 50) alert("Il PDF sembra contenere principalmente immagini. Prova ad aggiungere le informazioni nel campo di testo.");
       } else {
         text = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsText(file); });
       }
@@ -289,209 +243,33 @@ function ChatTool({ toolId, initialContent, onSendToTool }) {
     let fullContent = "";
     let displayText = trimmed;
     let fileName = null;
-    if (uploadedFile) { fullContent += `[Contenuto del file "${uploadedFile.name}"]\n${uploadedFile.text}\n\n`; fileName = uploadedFile.name; }
-    if (trimmed) fullContent += trimmed;
+    if (uploadedFile) { fullContent += `[Contenuto del brief: "${uploadedFile.name}"]\n${uploadedFile.text}\n\n`; fileName = uploadedFile.name; }
+    if (trimmed) fullContent += `[Contesto aggiuntivo fornito dall'utente]\n${trimmed}`;
 
-    const userMsg = { role: "user", content: fullContent, displayText, fileName };
+    const userMsg = { role: "user", content: fullContent, displayText: displayText || "(Brief caricato)", fileName };
     const newMessages = [...messages, userMsg];
     setMessages(newMessages);
-    setInput(""); setUploadedFile(null); setLoading(true);
+    setInput(""); setUploadedFile(null); setLoading(true); setStarted(true);
 
     const apiMessages = newMessages.map(m => ({ role: m.role, content: m.content }));
-    const reply = await callAI(systemPrompt, apiMessages);
+    const reply = await callAI(apiMessages);
     setMessages([...newMessages, { role: "assistant", content: reply }]);
     setLoading(false);
     inputRef.current?.focus();
   };
 
   const handleKeyDown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
-
-  const lastAssistantMsg = [...messages].reverse().find(m => m.role === "assistant");
-  const pipeline = { pitch: [{ id: "brief", label: "Analizza Brief", icon: "🔍" }], brief: [{ id: "strategy", label: "Genera Strategia", icon: "🎯" }, { id: "competitor", label: "Scansiona Competitor", icon: "📡" }], strategy: [{ id: "creative", label: "Genera Concept", icon: "💡" }], competitor: [{ id: "strategy", label: "Genera Strategia", icon: "🎯" }], creative: [] };
   const formatSize = (b) => b < 1024 ? b + " B" : b < 1048576 ? (b / 1024).toFixed(1) + " KB" : (b / 1048576).toFixed(1) + " MB";
+  const resetSession = () => { setMessages([]); setUploadedFile(null); setInput(""); setStarted(false); };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "calc(100vh - 20px)", maxWidth: 840, margin: "0 auto" }}>
-      {/* Header */}
-      <div style={{ padding: "12px 0 10px", borderBottom: `1px solid ${BORDER}`, marginBottom: 4, flexShrink: 0, display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ fontSize: 22 }}>{config.icon}</span>
-        <div style={{ flex: 1 }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, color: "#fff", fontFamily: "'Space Mono', monospace", margin: 0 }}>{config.title}</h2>
-          <p style={{ color: MUTED, fontSize: 11, margin: 0 }}>{config.subtitle}</p>
-        </div>
-        {messages.length > 0 && (
-          <button onClick={() => { setMessages([]); setUploadedFile(null); setInput(""); }}
-            style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 6, color: MUTED, cursor: "pointer", padding: "4px 10px", fontSize: 10, fontFamily: "'Space Mono', monospace" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "#fff"; e.currentTarget.style.color = "#fff"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}
-          >Nuova sessione</button>
-        )}
-      </div>
-
-      {/* Chat Area */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "10px 0" }}>
-        {messages.length === 0 ? (
-          <div style={{ textAlign: "center", padding: "50px 20px" }}>
-            <div style={{ fontSize: 44, marginBottom: 14 }}>{config.icon}</div>
-            <p style={{ color: MUTED, fontSize: 14, maxWidth: 420, margin: "0 auto 20px", lineHeight: 1.6 }}>{config.welcome}</p>
-            <div style={{ display: "flex", gap: 8, justifyContent: "center", flexWrap: "wrap" }}>
-              {config.starters.map(q => (
-                <button key={q} onClick={() => setInput(q)}
-                  style={{ padding: "7px 13px", background: `${G}08`, border: `1px solid ${G}20`, borderRadius: 18, color: G, fontSize: 12, cursor: "pointer", fontFamily: "'DM Sans', sans-serif", transition: "all 0.15s" }}
-                  onMouseEnter={e => e.currentTarget.style.background = `${G}18`}
-                  onMouseLeave={e => e.currentTarget.style.background = `${G}08`}
-                >{q}</button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <>
-            {messages.map((msg, i) => <ChatMessage key={i} msg={msg} />)}
-            {loading && <LoadingBubble />}
-          </>
-        )}
-
-        {/* Pipeline buttons */}
-        {lastAssistantMsg && !loading && pipeline[toolId]?.length > 0 && (
-          <div style={{ padding: "10px 0 6px", display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
-            <span style={{ color: MUTED, fontSize: 10, fontFamily: "'Space Mono', monospace" }}>PROSEGUI CON →</span>
-            {pipeline[toolId].map(t => (
-              <button key={t.id} onClick={() => onSendToTool(t.id, lastAssistantMsg.content)}
-                style={{ padding: "6px 12px", background: `${G}08`, border: `1px solid ${G}25`, borderRadius: 7, color: G, fontSize: 11, cursor: "pointer", fontFamily: "'Space Mono', monospace", transition: "all 0.15s", display: "flex", alignItems: "center", gap: 5 }}
-                onMouseEnter={e => { e.currentTarget.style.background = `${G}18`; e.currentTarget.style.borderColor = G; }}
-                onMouseLeave={e => { e.currentTarget.style.background = `${G}08`; e.currentTarget.style.borderColor = `${G}25`; }}
-              >{t.icon} {t.label} →</button>
-            ))}
-          </div>
-        )}
-        <div ref={chatEndRef} />
-      </div>
-
-      {/* Input */}
-      <div style={{ flexShrink: 0, borderTop: `1px solid ${BORDER}`, padding: "10px 0 6px" }}>
-        {uploadedFile && (
-          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: `${G}08`, border: `1px solid ${G}20`, borderRadius: 7, marginBottom: 8, fontSize: 12 }}>
-            <span>📄</span>
-            <span style={{ color: "#fff", flex: 1 }}>{uploadedFile.name} <span style={{ color: MUTED }}>({formatSize(uploadedFile.size)})</span></span>
-            <button onClick={() => setUploadedFile(null)} style={{ background: "none", border: "none", color: MUTED, cursor: "pointer" }}>✕</button>
-          </div>
-        )}
-        <div style={{ display: "flex", gap: 7, alignItems: "flex-end" }}>
-          <label style={{ cursor: "pointer", padding: "9px 11px", background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 9, display: "flex", alignItems: "center", flexShrink: 0, transition: "border-color 0.15s" }}
-            onMouseEnter={e => e.currentTarget.style.borderColor = G}
-            onMouseLeave={e => e.currentTarget.style.borderColor = BORDER}>
-            <input type="file" accept=".pdf,.txt,.md,.csv,.doc,.docx,.pptx" style={{ display: "none" }} onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ""; }} />
-            {processingFile ? <span style={{ width: 16, height: 16, border: `2px solid ${G}40`, borderTopColor: G, borderRadius: "50%", display: "block", animation: "spin 0.6s linear infinite" }} /> : <span style={{ fontSize: 16 }}>📎</span>}
-          </label>
-          <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
-            placeholder={messages.length === 0 ? "Descrivi il progetto o carica un file..." : "Chiedi di approfondire, modificare, esplorare..."}
-            rows={Math.min(input.split("\n").length, 4) || 1}
-            style={{ flex: 1, background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 9, color: "#fff", padding: "9px 13px", fontSize: 14, fontFamily: "'DM Sans', sans-serif", resize: "none", outline: "none", transition: "border-color 0.15s" }}
-            onFocus={e => e.target.style.borderColor = G} onBlur={e => e.target.style.borderColor = BORDER} />
-          <button onClick={send} disabled={loading || (!input.trim() && !uploadedFile)}
-            style={{ padding: "9px 14px", background: G, border: "none", borderRadius: 9, cursor: loading || (!input.trim() && !uploadedFile) ? "not-allowed" : "pointer", opacity: loading || (!input.trim() && !uploadedFile) ? 0.25 : 1, transition: "opacity 0.15s", display: "flex", alignItems: "center", flexShrink: 0 }}>
-            {loading ? <span style={{ width: 16, height: 16, border: "2px solid rgba(0,0,0,0.2)", borderTopColor: "#000", borderRadius: "50%", display: "block", animation: "spin 0.6s linear infinite" }} /> : <span style={{ fontSize: 16, color: "#000", fontWeight: 700 }}>↑</span>}
-          </button>
-        </div>
-        <div style={{ textAlign: "center", marginTop: 4 }}>
-          <span style={{ color: MUTED, fontSize: 9, fontFamily: "'Space Mono', monospace" }}>Shift+Enter per andare a capo · Enter per inviare</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Navigation ───
-const TOOLS = [
-  { id: "home", label: "Home", icon: "⚡" },
-  { id: "pitch", label: "Pitch Screener", icon: "⚖️" },
-  { id: "brief", label: "Brief Analyzer", icon: "🔍" },
-  { id: "strategy", label: "Strategy Gen", icon: "🎯" },
-  { id: "competitor", label: "Trend Scanner", icon: "📡" },
-  { id: "creative", label: "Concept Gen", icon: "💡" },
-];
-
-// ─── Home ───
-function Home({ onNavigate }) {
-  const cards = [
-    { id: "pitch", icon: "⚖️", title: "Pitch Screener", desc: "Valuta se accettare una gara. Semaforo GO/NO-GO basato sulle regole SBAM.", tag: "SCREENING" },
-    { id: "brief", icon: "🔍", title: "Brief Analyzer", desc: "Analizza brief in una conversazione guidata. Carica un PDF, esplora insight, affina l'analisi.", tag: "ANALYSIS" },
-    { id: "strategy", icon: "🎯", title: "Strategy Generator", desc: "Costruisci la strategia insieme all'AI. Target, canali, big idea — itera fino alla perfezione.", tag: "STRATEGY" },
-    { id: "competitor", icon: "📡", title: "Trend Scanner", desc: "Esplora il mercato in profondità. Competitor, trend, white space — approfondisci con domande.", tag: "INTELLIGENCE" },
-    { id: "creative", icon: "💡", title: "Concept Generator", desc: "Genera concept Simple & Loud. Sviluppali, cambiali, affinali attraverso il dialogo.", tag: "CREATIVE" },
-  ];
-  return (
-    <div style={{ maxWidth: 880, margin: "0 auto" }}>
-      <div style={{ textAlign: "center", padding: "55px 20px 45px", position: "relative" }}>
-        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 380, height: 380, background: `radial-gradient(circle, ${G}08 0%, transparent 70%)`, pointerEvents: "none" }} />
-        <div style={{ fontSize: 10, fontFamily: "'Space Mono', monospace", color: G, letterSpacing: 4, textTransform: "uppercase", marginBottom: 18 }}>AI-Powered Creative Suite</div>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 14 }}>
-          <img src="/logo.png" alt="SBAM" style={{ height: 48, objectFit: "contain" }} />
-          <span style={{ fontSize: 44, fontWeight: 800, color: G, fontFamily: "'Space Mono', monospace", opacity: 0.55 }}>.ai</span>
-        </div>
-        <p style={{ fontSize: 16, color: MUTED, maxWidth: 460, margin: "0 auto 6px", lineHeight: 1.6, fontFamily: "'DM Sans', sans-serif" }}>La suite AI interna per il team SBAM.</p>
-        <p style={{ fontSize: 14, color: MUTED, maxWidth: 460, margin: "0 auto", fontFamily: "'DM Sans', sans-serif", fontStyle: "italic" }}>Radical Simplicity, superpowered by AI.</p>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginTop: 28, padding: "10px 16px", background: `${G}06`, borderRadius: 10, maxWidth: 520, margin: "28px auto 0" }}>
-          <span style={{ fontSize: 10, fontFamily: "'Space Mono', monospace", color: G }}>WORKFLOW</span>
-          <span style={{ color: MUTED, fontSize: 10 }}>│</span>
-          {["⚖️", "🔍", "📡", "🎯", "💡"].map((e, i) => <span key={i}><span style={{ fontSize: 12 }}>{e}</span>{i < 4 && <span style={{ color: MUTED, fontSize: 10, margin: "0 2px" }}>→</span>}</span>)}
-          <span style={{ color: MUTED, fontSize: 10 }}>│</span>
-          <span style={{ fontSize: 9, color: MUTED, fontFamily: "'Space Mono', monospace" }}>Screen → Brief → Trends → Strategy → Concept</span>
-        </div>
-      </div>
-      {/* Pitch Screener — featured card */}
-      <div style={{ padding: "0 20px", marginBottom: 14 }}>
-        <div onClick={() => onNavigate("pitch")}
-          style={{ background: CARD, border: `1px solid ${G}30`, borderRadius: 13, padding: "24px 28px", cursor: "pointer", transition: "all 0.25s ease", position: "relative", display: "flex", alignItems: "center", gap: 20 }}
-          onMouseEnter={e => { e.currentTarget.style.borderColor = G; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = `0 6px 24px ${G}15`; }}
-          onMouseLeave={e => { e.currentTarget.style.borderColor = `${G}30`; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}>
-          <div style={{ fontSize: 36 }}>⚖️</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 9, fontFamily: "'Space Mono', monospace", color: G, letterSpacing: 2, marginBottom: 6 }}>STEP 0 · SCREENING</div>
-            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: "0 0 4px", fontFamily: "'Space Mono', monospace" }}>Pitch Screener</h3>
-            <p style={{ fontSize: 13, color: MUTED, margin: 0, lineHeight: 1.5 }}>Nuova gara in arrivo? Valuta se accettarla con semaforo GO / NO-GO basato sulle regole SBAM.</p>
-          </div>
-          <div style={{ color: G, fontSize: 22, opacity: 0.5 }}>→</div>
-        </div>
-      </div>
-      {/* Other 4 tools in grid */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, padding: "0 20px" }}>
-        {cards.filter(c => c.id !== "pitch").map(card => (
-          <div key={card.id} onClick={() => onNavigate(card.id)}
-            style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 13, padding: 24, cursor: "pointer", transition: "all 0.25s ease", position: "relative" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = G; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = `0 6px 24px ${G}12`; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}>
-            <div style={{ fontSize: 9, fontFamily: "'Space Mono', monospace", color: G, letterSpacing: 2, marginBottom: 12 }}>{card.tag}</div>
-            <div style={{ fontSize: 28, marginBottom: 10 }}>{card.icon}</div>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: "#fff", margin: "0 0 6px", fontFamily: "'Space Mono', monospace" }}>{card.title}</h3>
-            <p style={{ fontSize: 12, color: MUTED, margin: 0, lineHeight: 1.5 }}>{card.desc}</p>
-            <div style={{ position: "absolute", bottom: 14, right: 18, color: G, fontSize: 18, opacity: 0.4 }}>→</div>
-          </div>
-        ))}
-      </div>
-      <div style={{ textAlign: "center", padding: "40px 20px 24px", color: MUTED, fontSize: 11, fontFamily: "'Space Mono', monospace" }}>SBAM — Part of JAKALA · AI Suite Internal Tool · 2026</div>
-    </div>
-  );
-}
-
-// ─── Main App ───
-export default function Page() {
-  const [activeTool, setActiveTool] = useState("home");
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [pipelineData, setPipelineData] = useState({});
-
-  const handleSendToTool = (targetId, content) => {
-    setPipelineData(prev => ({ ...prev, [targetId]: content }));
-    setActiveTool(targetId);
-  };
-
-  return (
-    <div style={{ display: "flex", height: "100vh", background: DARK, fontFamily: "'DM Sans', sans-serif", overflow: "hidden" }}>
+    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: DARK, fontFamily: "'DM Sans', sans-serif", overflow: "hidden" }}>
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500;600;700&display=swap');
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
         @keyframes pulse { 0%,100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }
+        @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
         * { box-sizing: border-box; }
         ::-webkit-scrollbar { width: 5px; }
         ::-webkit-scrollbar-track { background: transparent; }
@@ -499,36 +277,162 @@ export default function Page() {
         ::selection { background: ${G}33; color: #fff; }
       `}</style>
 
-      {/* Sidebar */}
-      <div style={{ width: sidebarCollapsed ? 52 : 200, background: DARKER, borderRight: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", transition: "width 0.25s ease", flexShrink: 0 }}>
-        <div style={{ padding: sidebarCollapsed ? "14px 6px" : "14px 12px", borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 52 }}>
-          {!sidebarCollapsed && <div style={{ display: "flex", alignItems: "center", gap: 4 }}><img src="/logo.png" alt="SBAM" style={{ height: 18, objectFit: "contain" }} /><span style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, fontSize: 12, color: G, opacity: 0.65 }}>.ai</span></div>}
-          <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)} style={{ background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 12, padding: 2, display: "flex", margin: sidebarCollapsed ? "0 auto" : 0 }}>{sidebarCollapsed ? "▶" : "◀"}</button>
+      {/* Header */}
+      <div style={{ padding: "12px 24px", borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", gap: 12, flexShrink: 0, background: DARKER }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <img src="/logo.png" alt="SBAM" style={{ height: 22, objectFit: "contain" }} />
+          <span style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, fontSize: 14, color: G, opacity: 0.65 }}>.ai</span>
         </div>
-        <nav style={{ flex: 1, padding: "8px 5px" }}>
-          {TOOLS.map(tool => {
-            const active = activeTool === tool.id;
-            return (
-              <button key={tool.id} onClick={() => setActiveTool(tool.id)}
-                style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: sidebarCollapsed ? "8px 0" : "8px 10px", justifyContent: sidebarCollapsed ? "center" : "flex-start", background: active ? `${G}12` : "transparent", border: "none", borderRadius: 6, color: active ? G : MUTED, cursor: "pointer", fontSize: 11, fontFamily: "'Space Mono', monospace", fontWeight: active ? 700 : 400, marginBottom: 2, transition: "all 0.15s", borderLeft: active ? `2px solid ${G}` : "2px solid transparent" }}
-                onMouseEnter={e => { if (!active) e.currentTarget.style.color = "#fff"; }}
-                onMouseLeave={e => { if (!active) e.currentTarget.style.color = active ? G : MUTED; }}
-                title={sidebarCollapsed ? tool.label : ""}>
-                <span style={{ fontSize: 14 }}>{tool.icon}</span>
-                {!sidebarCollapsed && <span>{tool.label}</span>}
-              </button>
-            );
-          })}
-        </nav>
-        {!sidebarCollapsed && <div style={{ padding: "10px 12px", borderTop: `1px solid ${BORDER}`, fontSize: 9, color: MUTED, fontFamily: "'Space Mono', monospace" }}>Powered by Claude AI<br />Part of JAKALA</div>}
+        <div style={{ width: 1, height: 20, background: BORDER }} />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ fontSize: 18 }}>⚖️</span>
+          <div>
+            <h1 style={{ fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "'Space Mono', monospace", margin: 0 }}>Pitch Screener</h1>
+            <p style={{ color: MUTED, fontSize: 10, margin: 0, fontFamily: "'Space Mono', monospace" }}>Sistema di valutazione gare</p>
+          </div>
+        </div>
+        <div style={{ flex: 1 }} />
+        {started && (
+          <button onClick={resetSession}
+            style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 6, color: MUTED, cursor: "pointer", padding: "5px 12px", fontSize: 11, fontFamily: "'Space Mono', monospace", transition: "all 0.15s" }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "#fff"; e.currentTarget.style.color = "#fff"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}
+          >Nuova valutazione</button>
+        )}
       </div>
 
-      {/* Main */}
-      <div style={{ flex: 1, overflow: activeTool === "home" ? "auto" : "hidden", padding: activeTool === "home" ? 0 : "8px 20px" }}>
-        {activeTool === "home"
-          ? <Home onNavigate={setActiveTool} />
-          : <ChatTool key={activeTool + (pipelineData[activeTool] ? "-pipe" : "")} toolId={activeTool} initialContent={pipelineData[activeTool] || null} onSendToTool={handleSendToTool} />
-        }
+      {/* Main Content */}
+      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", maxWidth: 860, width: "100%", margin: "0 auto", padding: "0 20px" }}>
+        <div style={{ flex: 1, overflowY: "auto", padding: "10px 0" }}>
+          {!started ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100%", padding: "40px 0" }}>
+              <div style={{ position: "relative", marginBottom: 28 }}>
+                <div style={{ width: 72, height: 72, borderRadius: 18, background: `${G}10`, border: `1px solid ${G}25`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, animation: "float 3s ease-in-out infinite" }}>⚖️</div>
+              </div>
+              <h2 style={{ fontSize: 24, fontWeight: 700, color: "#fff", fontFamily: "'Space Mono', monospace", margin: "0 0 8px", textAlign: "center" }}>Nuova gara in arrivo?</h2>
+              <p style={{ color: MUTED, fontSize: 15, maxWidth: 480, textAlign: "center", lineHeight: 1.6, margin: "0 0 32px" }}>
+                Carica il brief e aggiungi tutte le info che hai. Ti restituisco un punteggio su 100 con la raccomandazione go/no-go.
+              </p>
+
+              <label style={{
+                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+                width: "100%", maxWidth: 520, padding: "32px 24px",
+                background: uploadedFile ? `${G}08` : CARD,
+                border: `2px dashed ${uploadedFile ? G : BORDER}`,
+                borderRadius: 14, cursor: "pointer", transition: "all 0.25s", marginBottom: 16,
+              }}
+                onMouseEnter={e => { if (!uploadedFile) { e.currentTarget.style.borderColor = G; e.currentTarget.style.background = `${G}05`; } }}
+                onMouseLeave={e => { if (!uploadedFile) { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.background = CARD; } }}
+                onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = G; e.currentTarget.style.background = `${G}08`; }}
+                onDragLeave={e => { if (!uploadedFile) { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.background = CARD; } }}
+                onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0]); }}
+              >
+                <input type="file" accept=".pdf,.txt,.md,.csv,.doc,.docx,.pptx" style={{ display: "none" }} onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ""; }} />
+                {processingFile ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <span style={{ width: 20, height: 20, border: `2px solid ${G}40`, borderTopColor: G, borderRadius: "50%", display: "block", animation: "spin 0.6s linear infinite" }} />
+                    <span style={{ color: G, fontSize: 13, fontFamily: "'Space Mono', monospace" }}>Elaborazione in corso...</span>
+                  </div>
+                ) : uploadedFile ? (
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
+                    <span style={{ fontSize: 28 }}>📄</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ color: "#fff", fontSize: 14, fontWeight: 600 }}>{uploadedFile.name}</div>
+                      <div style={{ color: MUTED, fontSize: 12 }}>{formatSize(uploadedFile.size)} · Pronto per l'analisi</div>
+                    </div>
+                    <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setUploadedFile(null); }}
+                      style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 6, color: MUTED, cursor: "pointer", padding: "4px 8px", fontSize: 11 }}>✕</button>
+                  </div>
+                ) : (
+                  <>
+                    <span style={{ fontSize: 32, marginBottom: 10, opacity: 0.6 }}>📎</span>
+                    <span style={{ color: "#fff", fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Carica il brief della gara</span>
+                    <span style={{ color: MUTED, fontSize: 12 }}>PDF, Word, TXT — oppure trascina qui</span>
+                  </>
+                )}
+              </label>
+
+              <div style={{ width: "100%", maxWidth: 520, marginBottom: 16 }}>
+                <textarea
+                  ref={inputRef}
+                  value={input}
+                  onChange={e => setInput(e.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Aggiungi contesto: budget, numero agenzie, rimborso spese, relazioni col cliente, info da email o call..."
+                  rows={4}
+                  style={{
+                    width: "100%", background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 10,
+                    color: "#fff", padding: "12px 15px", fontSize: 14, fontFamily: "'DM Sans', sans-serif",
+                    resize: "vertical", outline: "none", transition: "border-color 0.15s", lineHeight: 1.6,
+                  }}
+                  onFocus={e => e.target.style.borderColor = G}
+                  onBlur={e => e.target.style.borderColor = BORDER}
+                />
+              </div>
+
+              <button onClick={send} disabled={loading || (!input.trim() && !uploadedFile)}
+                style={{
+                  padding: "12px 32px", background: G, border: "none", borderRadius: 10,
+                  cursor: loading || (!input.trim() && !uploadedFile) ? "not-allowed" : "pointer",
+                  opacity: loading || (!input.trim() && !uploadedFile) ? 0.3 : 1,
+                  transition: "all 0.2s", fontSize: 14, fontWeight: 700, color: "#000",
+                  fontFamily: "'Space Mono', monospace", display: "flex", alignItems: "center", gap: 8,
+                }}>
+                {loading ? (
+                  <span style={{ width: 16, height: 16, border: "2px solid rgba(0,0,0,0.2)", borderTopColor: "#000", borderRadius: "50%", display: "block", animation: "spin 0.6s linear infinite" }} />
+                ) : (
+                  <>Analizza la gara →</>
+                )}
+              </button>
+
+              <p style={{ color: MUTED, fontSize: 11, marginTop: 16, fontFamily: "'Space Mono', monospace", textAlign: "center" }}>
+                Puoi caricare solo il brief, solo il testo, o entrambi.
+              </p>
+            </div>
+          ) : (
+            <>
+              {messages.map((msg, i) => <ChatMessage key={i} msg={msg} />)}
+              {loading && <LoadingBubble />}
+              <div ref={chatEndRef} />
+            </>
+          )}
+        </div>
+
+        {started && (
+          <div style={{ flexShrink: 0, borderTop: `1px solid ${BORDER}`, padding: "10px 0 6px" }}>
+            {uploadedFile && (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: `${G}08`, border: `1px solid ${G}20`, borderRadius: 7, marginBottom: 8, fontSize: 12 }}>
+                <span>📄</span>
+                <span style={{ color: "#fff", flex: 1 }}>{uploadedFile.name} <span style={{ color: MUTED }}>({formatSize(uploadedFile.size)})</span></span>
+                <button onClick={() => setUploadedFile(null)} style={{ background: "none", border: "none", color: MUTED, cursor: "pointer" }}>✕</button>
+              </div>
+            )}
+            <div style={{ display: "flex", gap: 7, alignItems: "flex-end" }}>
+              <label style={{ cursor: "pointer", padding: "9px 11px", background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 9, display: "flex", alignItems: "center", flexShrink: 0, transition: "border-color 0.15s" }}
+                onMouseEnter={e => e.currentTarget.style.borderColor = G}
+                onMouseLeave={e => e.currentTarget.style.borderColor = BORDER}>
+                <input type="file" accept=".pdf,.txt,.md,.csv,.doc,.docx,.pptx" style={{ display: "none" }} onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ""; }} />
+                {processingFile ? <span style={{ width: 16, height: 16, border: `2px solid ${G}40`, borderTopColor: G, borderRadius: "50%", display: "block", animation: "spin 0.6s linear infinite" }} /> : <span style={{ fontSize: 16 }}>📎</span>}
+              </label>
+              <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
+                placeholder="Rispondi alle domande o aggiungi nuove informazioni..."
+                rows={Math.min(input.split("\n").length, 4) || 1}
+                style={{ flex: 1, background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 9, color: "#fff", padding: "9px 13px", fontSize: 14, fontFamily: "'DM Sans', sans-serif", resize: "none", outline: "none", transition: "border-color 0.15s" }}
+                onFocus={e => e.target.style.borderColor = G} onBlur={e => e.target.style.borderColor = BORDER} />
+              <button onClick={send} disabled={loading || (!input.trim() && !uploadedFile)}
+                style={{ padding: "9px 14px", background: G, border: "none", borderRadius: 9, cursor: loading || (!input.trim() && !uploadedFile) ? "not-allowed" : "pointer", opacity: loading || (!input.trim() && !uploadedFile) ? 0.25 : 1, transition: "opacity 0.15s", display: "flex", alignItems: "center", flexShrink: 0 }}>
+                {loading ? <span style={{ width: 16, height: 16, border: "2px solid rgba(0,0,0,0.2)", borderTopColor: "#000", borderRadius: "50%", display: "block", animation: "spin 0.6s linear infinite" }} /> : <span style={{ fontSize: 16, color: "#000", fontWeight: 700 }}>↑</span>}
+              </button>
+            </div>
+            <div style={{ textAlign: "center", marginTop: 4 }}>
+              <span style={{ color: MUTED, fontSize: 9, fontFamily: "'Space Mono', monospace" }}>Shift+Enter per andare a capo · Enter per inviare</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div style={{ textAlign: "center", padding: "6px 0", flexShrink: 0 }}>
+        <span style={{ color: MUTED, fontSize: 9, fontFamily: "'Space Mono', monospace" }}>SBAM — Part of JAKALA · Powered by Claude AI · 2026</span>
       </div>
     </div>
   );
