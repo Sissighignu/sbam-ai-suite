@@ -108,6 +108,25 @@ FORMATO OUTPUT FINALE (usa ESATTAMENTE questo formato quando hai tutte le info):
 ### Raccomandazione
 [Paragrafo di 3-5 righe con azione concreta]
 
+### 💡 Tips & Insight
+[2-3 tips educativi contestualizzati alla gara specifica. Ogni tip deve insegnare qualcosa al client leader sulla gestione delle gare, usando dati concreti. Scegli i tips più rilevanti per la gara in esame tra quelli sotto.]
+
+DATI SBAM 2025 DA USARE NEI TIPS (scegli quelli pertinenti alla gara):
+- Nel 2025 SBAM ha fatto 94 gare (8 al mese), con un win rate del 38% (24 vinte su 63 totali con esito). Benchmark: Dentsu Creative ne fa 35/anno con 200 addetti, We Are Social 35 con 150, TBWA 20 con 130, media UNA 15. SBAM ne ha fatte 94 con 90 persone — una sproporzione enorme che ha impattato la qualità.
+- Le gare nel 2025 sono costate 1.3 milioni di €, pari al 25% dell'intero costo del personale. Significa che 1 ora su 4 dell'agenzia non era billable perché spesa su gare.
+- Le gare "Top" (>100k) invitate nel 2025 (Collistar, Borotalco, Italo, Leroy Merlin, Moleskine, Lavazza, Sephora, Eataly, Groupe SEB) sono state quasi tutte perse, perché farne troppe in contemporanea defocalizza dalle gare grosse.
+- Lezione chiave del 2025: mischiare gare grosse e piccole defocalizza dalle grosse. Meglio farne poche e vincerne di più che farne tante per perderle tutte.
+- La distribuzione clienti SBAM è ancora troppo concentrata sotto i 50k di net revenue. Salire di fascia richiede selezionare gare con soglie più alte.
+- Il rimborso spese non copre i costi, ma è sempre garanzia di serietà del cliente e del processo (raccomandazione SBAM).
+- Secondo il Manifesto "La Buona Gara" (UNA/UPA): una gara seria ha max 3-4 agenzie, budget dichiarato, criteri di valutazione trasparenti, e fornisce feedback ai non vincitori.
+- UNA raccomanda che il numero massimo di agenzie in gara sia 3-4: oltre questo numero la probabilità di vittoria scende drasticamente e il processo perde di serietà.
+
+REGOLE PER I TIPS:
+- Scegli solo 2-3 tips, quelli più rilevanti per la gara specifica
+- Ogni tip deve essere collegato a un aspetto concreto della gara in esame (es: se non c'è rimborso, cita il dato sul costo delle gare; se ci sono troppe agenzie, cita il benchmark)
+- Usa il formato: **Titolo breve del tip.** Spiegazione con dato concreto.
+- I tips servono a educare i client leader, non a ripetere la raccomandazione
+
 Dove:
 - [EMOJI]: 🟢 per verde, 🟡 per giallo, 🔴 per rosso
 - [COLORE]: VERDE, GIALLO, ROSSO
@@ -213,6 +232,139 @@ function ChatMessage({ msg }) {
         ) : <RichText text={msg.content} />}
       </div>
     </div>
+  );
+}
+
+// ─── PDF Report Generation ───
+async function generatePDF(reportText) {
+  if (!window.jspdf) {
+    await new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+      s.onload = res; s.onerror = rej;
+      document.head.appendChild(s);
+    });
+  }
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const W = 210, H = 297;
+  const ML = 20, MR = 20, MT = 20;
+  const contentW = W - ML - MR;
+  let y = MT;
+
+  const addPage = () => { doc.addPage(); y = MT; };
+  const checkSpace = (needed) => { if (y + needed > H - 25) addPage(); };
+
+  // Header bar
+  doc.setFillColor(26, 26, 46);
+  doc.rect(0, 0, W, 16, "F");
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(200, 230, 74);
+  doc.text("SBAM.ai", ML, 10.5);
+  doc.setTextColor(180, 180, 180);
+  doc.setFont("helvetica", "normal");
+  doc.text("Pitch Screener — Report di Valutazione", ML + 22, 10.5);
+  doc.setFontSize(8);
+  doc.text(new Date().toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" }), W - MR, 10.5, { align: "right" });
+
+  y = 26;
+
+  // Parse the report
+  const lines = reportText.split("\n");
+  
+  for (const line of lines) {
+    if (line.startsWith("## ")) {
+      const text = line.slice(3).replace(/🟢|🟡|🔴/g, "").trim();
+      const hasGreen = line.includes("🟢");
+      const hasYellow = line.includes("🟡");
+      const hasRed = line.includes("🔴");
+      
+      checkSpace(18);
+      
+      if (line.includes("PUNTEGGIO")) {
+        // Score banner
+        const color = hasGreen ? [39,174,96] : hasYellow ? [243,156,18] : [231,76,60];
+        doc.setFillColor(...color);
+        doc.roundedRect(ML, y, contentW, 14, 3, 3, "F");
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(14);
+        doc.setTextColor(255, 255, 255);
+        doc.text(text, ML + contentW / 2, y + 9.5, { align: "center" });
+        y += 20;
+      } else {
+        doc.setFont("helvetica", "bold");
+        doc.setFontSize(13);
+        doc.setTextColor(15, 52, 96);
+        doc.text(text, ML, y + 5);
+        y += 10;
+        doc.setDrawColor(200, 230, 74);
+        doc.setLineWidth(0.5);
+        doc.line(ML, y - 3, ML + 30, y - 3);
+      }
+    } else if (line.startsWith("### ")) {
+      checkSpace(12);
+      doc.setFont("helvetica", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(26, 26, 46);
+      const text = line.slice(4).replace(/💡/g, "").trim();
+      doc.text(text, ML, y + 5);
+      y += 10;
+    } else if (line.startsWith("- ")) {
+      checkSpace(10);
+      const content = line.slice(2).replace(/\*\*/g, "");
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(60, 60, 60);
+      const splitLines = doc.splitTextToSize("• " + content, contentW - 5);
+      doc.text(splitLines, ML + 3, y + 4);
+      y += splitLines.length * 4.5 + 2;
+    } else if (line.trim() && !line.startsWith("---")) {
+      checkSpace(8);
+      const content = line.replace(/\*\*/g, "");
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(9);
+      doc.setTextColor(60, 60, 60);
+      const splitLines = doc.splitTextToSize(content, contentW);
+      doc.text(splitLines, ML, y + 4);
+      y += splitLines.length * 4.5 + 1;
+    }
+  }
+
+  // Footer
+  checkSpace(20);
+  y += 8;
+  doc.setDrawColor(220, 220, 220);
+  doc.line(ML, y, W - MR, y);
+  y += 6;
+  doc.setFontSize(7);
+  doc.setTextColor(150, 150, 150);
+  doc.text("SBAM — Part of JAKALA · Pitch Screener powered by Claude AI · Documento generato automaticamente", ML, y);
+
+  doc.save("SBAM_PitchScreener_Report.pdf");
+}
+
+// ─── Download Button ───
+function DownloadButton({ reportText }) {
+  const [generating, setGenerating] = useState(false);
+  const handleClick = async () => {
+    setGenerating(true);
+    try { await generatePDF(reportText); } catch (e) { alert("Errore nella generazione del PDF."); }
+    setGenerating(false);
+  };
+  return (
+    <button onClick={handleClick} disabled={generating}
+      style={{
+        display: "flex", alignItems: "center", gap: 6, padding: "8px 16px",
+        background: `${G}15`, border: `1px solid ${G}40`, borderRadius: 8,
+        color: G, fontSize: 12, fontFamily: "'Space Mono', monospace",
+        cursor: generating ? "wait" : "pointer", transition: "all 0.15s", marginTop: 10,
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = `${G}25`; e.currentTarget.style.borderColor = G; }}
+      onMouseLeave={e => { e.currentTarget.style.background = `${G}15`; e.currentTarget.style.borderColor = `${G}40`; }}
+    >
+      {generating ? "⏳ Generazione..." : "📥 Scarica Report PDF"}
+    </button>
   );
 }
 
@@ -414,7 +566,20 @@ export default function Page() {
             </div>
           ) : (
             <>
-              {messages.map((msg, i) => <ChatMessage key={i} msg={msg} />)}
+              {messages.map((msg, i) => {
+                const isLastAssistant = msg.role === "assistant" && !messages.slice(i + 1).some(m => m.role === "assistant");
+                const hasScore = msg.role === "assistant" && msg.content && msg.content.includes("PUNTEGGIO:");
+                return (
+                  <div key={i}>
+                    <ChatMessage msg={msg} />
+                    {isLastAssistant && hasScore && !loading && (
+                      <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 14, paddingLeft: 0 }}>
+                        <DownloadButton reportText={msg.content} />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
               {loading && <LoadingBubble />}
               <div ref={chatEndRef} />
             </>
