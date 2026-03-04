@@ -56,7 +56,21 @@ B5. Sono fornite indicazioni per la predisposizione del budget?
 B6. È possibile un confronto diretto col cliente per approfondimenti?
 
 AREA C — OPPORTUNITÀ ECONOMICA (50 punti, 5 criteri, 10 pt ciascuno):
-C1. La net revenue stimata è superiore a 50.000€?
+C1. Il budget della gara è adeguato alla tipologia di progetto richiesto? (NON usare una soglia fissa. La soglia minima dipende dal tipo di deliverable. Usa queste soglie di riferimento SBAM:
+
+SOGLIE MINIME PER TIPOLOGIA DI PROGETTO:
+- SPOT TV/VIDEO CON PRODUZIONE: net revenue agenzia minimo 60k (lavoro semplice) fino a 150k (spot importanti). A questo si aggiunge il budget di produzione (costo esterno per SBAM, girato a case di produzione): da 70k (produzioni piccole) a 800k (produzioni importanti). Se la produzione è realizzata con AI senza girato, la soglia di produzione scende a 30k. ATTENZIONE: se il budget totale include la produzione, devi scorporare il costo di produzione per capire se il fee agenzia è adeguato.
+- GESTIONE CANALI SOCIAL / PED: minimo 40k/anno di net revenue. Solitamente non hanno costi esterni significativi.
+- INFLUENCER MARKETING: soglia minima 50k budget totale incluso costo influencer. Il budget influencer è costo esterno per SBAM, quindi la net revenue reale per l'agenzia è molto inferiore al budget totale.
+- CAMPAGNA INTEGRATA (multi-canale): budget minimo 150k.
+- EVENTO / ATTIVAZIONE: minimo 80k incluso costi di produzione. Ci sono molti costi esterni, sotto questa soglia è impossibile fare qualcosa di sensato.
+- BRAND IDENTITY: soglia minima 30k di net revenue.
+
+PRINCIPI QUALITATIVI per casi non standard:
+- Distingui sempre tra budget totale e net revenue SBAM. I costi esterni (produzione, influencer, venue, media) non sono ricavo per l'agenzia.
+- Se il brief non specifica la split tra fee agenzia e costi esterni, chiedi chiarimenti o segnalalo come criticità.
+- Progetti con alta componente di costi esterni (spot, eventi, influencer) possono avere budget totali alti ma net revenue basse: valuta la net revenue, non il budget lordo.
+- Se la tipologia non rientra in nessuna delle categorie sopra, usa il principio generale: il fee agenzia deve giustificare l'effort richiesto in termini di team, tempo e complessità creativa.)
 C2. Il costo stimato di partecipazione è commisurato alla posta in gioco? (Valutazione qualitativa: l'AI stima la complessità della gara — deliverable richiesti, timeline, risorse presumibili — e la rapporta al valore economico dell'opportunità. Non chiedere all'utente di quantificare il costo: non ha gli strumenti per farlo. Usa il dato medio di 13k solo come contesto generico, mai come stima per la gara specifica.)
 C3. Le agenzie in gara sono massimo 4?
 C4. La durata contrattuale è pluriennale?
@@ -252,7 +266,7 @@ export default function Page() {
     let fullContent = "";
     let displayText = trimmed;
     let fileName = null;
-    if (uploadedFile) { fullContent += `[Contenuto del brief: "${uploadedFile.name}"]\n${truncateText(uploadedFile.text)}\n\n`; fileName = uploadedFile.name; }
+    if (uploadedFile) { fullContent += `[Contenuto del brief: "${uploadedFile.name}"]\n${uploadedFile.text}\n\n`; fileName = uploadedFile.name; }
     if (trimmed) fullContent += `[Contesto aggiuntivo fornito dall'utente]\n${trimmed}`;
 
     const userMsg = { role: "user", content: fullContent, displayText: displayText || "(Brief caricato)", fileName };
