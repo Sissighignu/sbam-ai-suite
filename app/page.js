@@ -142,6 +142,12 @@ async function extractPdfText(file) {
   return pages.join("\n\n");
 }
 
+// Truncate text to avoid exceeding API token limits
+function truncateText(text, maxChars = 40000) {
+  if (text.length <= maxChars) return text;
+  return text.slice(0, maxChars) + "\n\n[...testo troncato per limiti di lunghezza. Le prime " + Math.round(maxChars / 1000) + "k caratteri sono stati analizzati.]";
+}
+
 function RichText({ text }) {
   if (!text) return null;
   return (
@@ -246,7 +252,7 @@ export default function Page() {
     let fullContent = "";
     let displayText = trimmed;
     let fileName = null;
-    if (uploadedFile) { fullContent += `[Contenuto del brief: "${uploadedFile.name}"]\n${uploadedFile.text}\n\n`; fileName = uploadedFile.name; }
+    if (uploadedFile) { fullContent += `[Contenuto del brief: "${uploadedFile.name}"]\n${truncateText(uploadedFile.text)}\n\n`; fileName = uploadedFile.name; }
     if (trimmed) fullContent += `[Contesto aggiuntivo fornito dall'utente]\n${trimmed}`;
 
     const userMsg = { role: "user", content: fullContent, displayText: displayText || "(Brief caricato)", fileName };

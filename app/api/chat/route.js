@@ -40,9 +40,19 @@ export async function POST(request) {
     return NextResponse.json({ text });
   } catch (error) {
     console.error("Anthropic API error:", error);
+    
+    const status = error?.status || error?.statusCode || 500;
+    let userMessage = "Errore nella chiamata API.";
+    
+    if (status === 429 || (error.message && error.message.includes("rate_limit"))) {
+      userMessage = "Limite di richieste raggiunto. Attendi un minuto e riprova.";
+    } else if (status === 413 || (error.message && error.message.includes("too many"))) {
+      userMessage = "Il contenuto inviato è troppo lungo. Prova con un brief più breve o riduci il testo aggiuntivo.";
+    }
+    
     return NextResponse.json(
-      { error: error.message || "API call failed" },
-      { status: 500 }
+      { error: userMessage },
+      { status }
     );
   }
 }
