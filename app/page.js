@@ -74,6 +74,9 @@ FASCE SEMAFORO:
 - GIALLO (50-74): VALUTARE — Opportunità con criticità, servono approfondimenti.
 - ROSSO (0-49): NO-GO — Rischio troppo alto, meglio declinare.
 
+DEAL-BREAKER (override automatico):
+- Se le agenzie in gara sono 7 o più → NO-GO AUTOMATICO, indipendentemente dal punteggio totale. Indica una conduzione poco seria della gara da parte del cliente. In questo caso calcola comunque il punteggio per completezza, ma il semaforo è ROSSO e la raccomandazione è NO-GO. Nella raccomandazione spiega chiaramente che il numero di agenzie invitate è un segnale di scarsa serietà del processo e rende la partecipazione antieconomica.
+
 Semaforo per singola area: stesse proporzioni (verde >75%, giallo 50-74%, rosso <50%).
 
 FORMATO OUTPUT FINALE (usa ESATTAMENTE questo formato quando hai tutte le info):
