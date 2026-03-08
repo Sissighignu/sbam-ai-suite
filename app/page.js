@@ -358,12 +358,121 @@ function DownloadButton({ reportText }) {
         display: "flex", alignItems: "center", gap: 6, padding: "8px 16px",
         background: `${G}15`, border: `1px solid ${G}40`, borderRadius: 8,
         color: G, fontSize: 12, fontFamily: "'Space Mono', monospace",
-        cursor: generating ? "wait" : "pointer", transition: "all 0.15s", marginTop: 10,
+        cursor: generating ? "wait" : "pointer", transition: "all 0.15s",
       }}
       onMouseEnter={e => { e.currentTarget.style.background = `${G}25`; e.currentTarget.style.borderColor = G; }}
       onMouseLeave={e => { e.currentTarget.style.background = `${G}15`; e.currentTarget.style.borderColor = `${G}40`; }}
     >
       {generating ? "⏳ Generazione..." : "📥 Scarica Report PDF"}
+    </button>
+  );
+}
+
+// ─── Board Mail Generator ───
+const MAIL_SYSTEM_PROMPT = `Sei un membro del team SBAM che scrive una mail informale al board dell'agenzia per presentare una nuova opportunità di gara appena valutata con il Pitch Screener.
+
+FORMATO DELLA MAIL:
+Oggetto: [emoji semaforo] Nuova gara: [Nome Cliente] — [GO/VALUTARE/NO-GO]
+
+Corpo:
+- Saluto informale e amichevole
+- Cliente e contesto
+- Sintesi del brief (2-3 righe: cosa chiede il cliente)
+- Scope in caso di vittoria (cosa vinciamo concretamente: tipo di incarico, durata, valore)
+- Deliverable richiesti per partecipare alla gara (cosa dobbiamo preparare)
+- Data di consegna della gara
+- Considerazioni sintetiche dello screener con punteggio e ranking
+- Chiusura simpatica
+
+TONO:
+- Informale, carina, amichevole
+- Un pizzico di ironia e buon umore (senza esagerare)
+- Come se scrivessi a colleghi con cui lavori bene
+- In italiano
+- Concisa: la mail deve essere scannerizzabile in 30 secondi
+
+REGOLE:
+- Se qualche informazione non è disponibile dal report, omettila senza inventare
+- Il punteggio e il semaforo devono essere riportati fedelmente
+- Non aggiungere tips o analisi lunghe: è una mail operativa, non un report
+- Scrivi SOLO il testo della mail (oggetto + corpo), nient'altro`;
+
+function BoardMailButton({ reportText }) {
+  const [state, setState] = useState("idle"); // idle | loading | done
+  const [mailText, setMailText] = useState("");
+  const [copied, setCopied] = useState(false);
+
+  const handleGenerate = async () => {
+    setState("loading");
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          system: MAIL_SYSTEM_PROMPT,
+          messages: [{ role: "user", content: `Ecco il report del Pitch Screener. Scrivi la mail per il board basandoti su queste informazioni:\n\n${reportText}` }],
+        }),
+      });
+      const data = await res.json();
+      if (data.error) { alert(data.error); setState("idle"); return; }
+      setMailText(data.text || "Errore nella generazione.");
+      setState("done");
+    } catch (e) {
+      alert("Errore di connessione. Riprova.");
+      setState("idle");
+    }
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(mailText).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  };
+
+  if (state === "done") {
+    return (
+      <div style={{ marginTop: 10, animation: "fadeIn 0.3s ease" }}>
+        <div style={{
+          background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10,
+          padding: "16px 18px", maxWidth: "92%",
+        }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+            <span style={{ fontSize: 12, fontFamily: "'Space Mono', monospace", color: G }}>✉️ MAIL PER IL BOARD</span>
+            <button onClick={handleCopy}
+              style={{
+                padding: "5px 12px", background: copied ? `${GREEN}20` : `${G}15`,
+                border: `1px solid ${copied ? GREEN : `${G}40`}`, borderRadius: 6,
+                color: copied ? GREEN : G, fontSize: 11, fontFamily: "'Space Mono', monospace",
+                cursor: "pointer", transition: "all 0.15s",
+              }}>
+              {copied ? "✓ Copiato!" : "📋 Copia"}
+            </button>
+          </div>
+          <div style={{
+            color: TEXT, fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap",
+            background: DARKER, borderRadius: 8, padding: "14px 16px",
+            border: `1px solid ${BORDER}`, maxHeight: 400, overflowY: "auto",
+          }}>
+            {mailText}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={handleGenerate} disabled={state === "loading"}
+      style={{
+        display: "flex", alignItems: "center", gap: 6, padding: "8px 16px",
+        background: `${G}15`, border: `1px solid ${G}40`, borderRadius: 8,
+        color: G, fontSize: 12, fontFamily: "'Space Mono', monospace",
+        cursor: state === "loading" ? "wait" : "pointer", transition: "all 0.15s",
+      }}
+      onMouseEnter={e => { e.currentTarget.style.background = `${G}25`; e.currentTarget.style.borderColor = G; }}
+      onMouseLeave={e => { e.currentTarget.style.background = `${G}15`; e.currentTarget.style.borderColor = `${G}40`; }}
+    >
+      {state === "loading" ? "⏳ Generazione mail..." : "✉️ Genera mail per il board"}
     </button>
   );
 }
@@ -573,8 +682,11 @@ export default function Page() {
                   <div key={i}>
                     <ChatMessage msg={msg} />
                     {isLastAssistant && hasScore && !loading && (
-                      <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 14, paddingLeft: 0 }}>
-                        <DownloadButton reportText={msg.content} />
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14, paddingLeft: 0, marginTop: -4 }}>
+                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                          <DownloadButton reportText={msg.content} />
+                          <BoardMailButton reportText={msg.content} />
+                        </div>
                       </div>
                     )}
                   </div>
