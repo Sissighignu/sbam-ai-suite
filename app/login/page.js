@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, Suspense } from 'react'
-import { useSearchParams } from 'next/navigation'
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap');
@@ -183,8 +182,6 @@ function LoginForm() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const searchParams = useSearchParams()
-
   async function handleSubmit(e) {
     e.preventDefault()
     setLoading(true)
@@ -198,8 +195,8 @@ function LoginForm() {
       })
 
       if (res.ok) {
-        const from = searchParams.get('from')
-        const destination = (!from || from === '/login') ? '/' : from
+        // redirect always to root
+        window.location.href = "/";
         window.location.href = destination
       } else {
         setError('Credenziali non valide. Riprova.')
