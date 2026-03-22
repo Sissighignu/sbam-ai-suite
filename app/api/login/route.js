@@ -7,7 +7,7 @@ export async function POST(request) {
   const validPassword = process.env.INTERNAL_PASSWORD
 
   if (username === validUser && password === validPassword) {
-    const response = NextResponse.json({ success: true })
+    const response = NextResponse.redirect(new URL('/', request.url), 302)
     response.cookies.set('sbam_session', 'authenticated', {
       httpOnly: true,
       secure: true,

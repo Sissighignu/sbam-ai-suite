@@ -34,33 +34,19 @@ const styles = `
     from { opacity: 0; transform: translateY(20px); }
     to   { opacity: 1; transform: translateY(0); }
   }
-  .logo-badge {
-    display: inline-flex; align-items: center; gap: 10px; margin-bottom: 16px;
-  }
-  .logo-dot {
-    width: 8px; height: 8px; background: #ff5000; border-radius: 50%;
-    animation: pulse 2s ease-in-out infinite;
-  }
+  .logo-badge { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 16px; }
+  .logo-dot { width: 8px; height: 8px; background: #ff5000; border-radius: 50%; animation: pulse 2s ease-in-out infinite; }
   @keyframes pulse {
     0%, 100% { opacity: 1; transform: scale(1); }
     50% { opacity: 0.5; transform: scale(0.8); }
   }
-  .logo-name {
-    font-size: 11px; font-weight: 500; letter-spacing: 0.2em;
-    color: rgba(255,255,255,0.4); text-transform: uppercase;
-  }
-  .headline {
-    font-family: 'DM Serif Display', serif; font-size: 32px;
-    color: #fff; line-height: 1.1; margin-bottom: 6px;
-  }
+  .logo-name { font-size: 11px; font-weight: 500; letter-spacing: 0.2em; color: rgba(255,255,255,0.4); text-transform: uppercase; }
+  .headline { font-family: 'DM Serif Display', serif; font-size: 32px; color: #fff; line-height: 1.1; margin-bottom: 6px; }
   .headline em { font-style: italic; color: rgba(255,255,255,0.4); }
   .subtitle { font-size: 11px; color: rgba(255,255,255,0.25); letter-spacing: 0.05em; margin-top: 10px; }
   .divider { width: 32px; height: 1px; background: rgba(255,80,0,0.4); margin: 32px 0; }
   .field { margin-bottom: 16px; }
-  .field label {
-    display: block; font-size: 10px; letter-spacing: 0.15em;
-    text-transform: uppercase; color: rgba(255,255,255,0.3); margin-bottom: 8px;
-  }
+  .field label { display: block; font-size: 10px; letter-spacing: 0.15em; text-transform: uppercase; color: rgba(255,255,255,0.3); margin-bottom: 8px; }
   .field input {
     width: 100%; background: rgba(255,255,255,0.04);
     border: 1px solid rgba(255,255,255,0.1); border-radius: 2px;
@@ -78,10 +64,7 @@ const styles = `
   }
   .btn:hover:not(:disabled) { background: #e04800; }
   .btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .footer-note {
-    margin-top: 28px; font-size: 10px; color: rgba(255,255,255,0.15);
-    letter-spacing: 0.05em; text-align: center; line-height: 1.6;
-  }
+  .footer-note { margin-top: 28px; font-size: 10px; color: rgba(255,255,255,0.15); letter-spacing: 0.05em; text-align: center; line-height: 1.6; }
 `
 
 export default function LoginPage() {
@@ -99,9 +82,11 @@ export default function LoginPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username, password }),
+        credentials: 'include',
+        redirect: 'follow',
       })
-      if (res.ok) {
-        window.location.href = '/'
+      if (res.ok || res.redirected) {
+        window.location.href = res.url && !res.url.includes('/login') ? res.url : '/'
       } else {
         setError('Credenziali non valide. Riprova.')
       }
