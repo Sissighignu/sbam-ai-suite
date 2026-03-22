@@ -3,26 +3,16 @@ import { NextResponse } from 'next/server'
 export function middleware(request) {
   const { pathname } = request.nextUrl
 
-  // Lascia passare sempre la pagina di login e la sua API
   if (pathname.startsWith('/login') || pathname.startsWith('/api/login')) {
     return NextResponse.next()
   }
 
-  // Controlla il cookie di sessione
   const session = request.cookies.get('sbam_session')
-  
-  console.log('--- MIDDLEWARE DEBUG ---')
-  console.log('Pathname:', pathname)
-  console.log('Cookie sbam_session:', session?.value)
-  console.log('SESSION_TOKEN env:', process.env.SESSION_TOKEN)
-  console.log('Match:', session?.value === process.env.SESSION_TOKEN)
-  console.log('-----------------------')
 
-  if (session?.value && session.value === process.env.SESSION_TOKEN) {
+  if (session?.value === 'authenticated') {
     return NextResponse.next()
   }
 
-  // Reindirizza al login
   const loginUrl = new URL('/login', request.url)
   loginUrl.searchParams.set('from', pathname)
   return NextResponse.redirect(loginUrl)
