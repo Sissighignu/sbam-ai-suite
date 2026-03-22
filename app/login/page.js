@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, Suspense } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap');
@@ -183,7 +183,6 @@ function LoginForm() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const router = useRouter()
   const searchParams = useSearchParams()
 
   async function handleSubmit(e) {
@@ -199,8 +198,9 @@ function LoginForm() {
       })
 
       if (res.ok) {
-        const from = searchParams.get('from') || '/'
-        router.push(from)
+        const from = searchParams.get('from')
+        const destination = (!from || from === '/login') ? '/' : from
+        window.location.href = destination
       } else {
         setError('Credenziali non valide. Riprova.')
       }
@@ -264,13 +264,14 @@ function LoginForm() {
   )
 }
 
+
 export default function LoginPage() {
   return (
     <>
       <style>{styles}</style>
       <div className="bg" />
       <div className="noise" />
-      <Suspense fallback={<div className="card" style={{color:'rgba(255,255,255,0.3)',fontFamily:'monospace',fontSize:'12px'}}>Caricamento...</div>}>
+      <Suspense fallback={<div style={{color:'rgba(255,255,255,0.3)',fontFamily:'monospace',fontSize:'12px',padding:'48px'}}>Caricamento...</div>}>
         <LoginForm />
       </Suspense>
     </>
