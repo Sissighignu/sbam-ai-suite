@@ -10,7 +10,15 @@ export function middleware(request) {
 
   // Controlla il cookie di sessione
   const session = request.cookies.get('sbam_session')
-  if (session?.value === process.env.SESSION_TOKEN) {
+  
+  console.log('--- MIDDLEWARE DEBUG ---')
+  console.log('Pathname:', pathname)
+  console.log('Cookie sbam_session:', session?.value)
+  console.log('SESSION_TOKEN env:', process.env.SESSION_TOKEN)
+  console.log('Match:', session?.value === process.env.SESSION_TOKEN)
+  console.log('-----------------------')
+
+  if (session?.value && session.value === process.env.SESSION_TOKEN) {
     return NextResponse.next()
   }
 
