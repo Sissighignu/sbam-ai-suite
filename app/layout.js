@@ -1,8 +1,16 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "SBAM.ai — Pitch Screener",
-  description: "Valuta le opportunità di gara con il sistema di scoring SBAM. Upload del brief, analisi AI, punteggio su 100.",
+  title: "SBAM.ai — AI-Powered Creative Suite",
+  description: "La suite AI interna per il team SBAM. Radical Simplicity, superpowered by AI.",
+  robots: {
+    index: false,
+    follow: false,
+    googleBot: {
+      index: false,
+      follow: false,
+    },
+  },
 };
 
 export default function RootLayout({ children }) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState } from "react";
 
 const G = "#c8e64a";
 const DARK = "#0a0a0a";
@@ -9,141 +9,14 @@ const CARD = "#111111";
 const BORDER = "#1a1a1a";
 const MUTED = "#666666";
 const TEXT = "#e0e0e0";
-const GREEN = "#27ae60";
-const YELLOW = "#f39c12";
-const RED = "#e74c3c";
 
-const SYSTEM_PROMPT = `Sei il Pitch Screener di SBAM.ai — lo strumento interno di SBAM (agenzia creativa, part of JAKALA) per valutare le opportunità di gara.
-
-IL TUO COMPITO:
-Analizzare le informazioni fornite dall'utente (brief di gara e/o testo con contesto aggiuntivo), mappare le informazioni sui 20 criteri di valutazione, e produrre un punteggio su 100 con raccomandazione go/no-go.
-
-FILOSOFIA SBAM:
-La filosofia di SBAM è "Radical Simplicity". Non partecipare al maggior numero possibile di gare, ma selezionare con attenzione quelle giuste. Ogni gara a cui si partecipa sottrae risorse creative e organizzative al team. Dato di contesto: il costo medio di partecipazione alle gare per SBAM nel 2025 è stato di circa 13.000€, con picchi fino a 40.000€ per le gare più grandi. ATTENZIONE: questo è un dato medio statistico, NON un costo applicabile a ogni singola gara. Il costo reale varia enormemente in base a complessità dei deliverable, team coinvolto e timeline. Non citare mai questo dato come costo presunto della gara in esame.
-
-FLUSSO DI LAVORO:
-1. ACCOGLIENZA: Se l'utente non ha ancora fornito informazioni, chiedi di caricare il brief e/o descrivere la gara.
-2. ANALISI SILENZIOSA: Leggi il materiale e mappa le informazioni sui 20 criteri. Per ogni criterio a cui riesci a rispondere, assegna Sì/No/Non so e annota la fonte.
-3. PRESENTAZIONE INTERMEDIA: Mostra all'utente quali criteri hai compilato e quali restano scoperti. Chiedi conferma.
-4. DOMANDE MIRATE: Poni domande SOLO per i criteri rimasti senza risposta. Raggruppa le domande per area. Sii diretto e conciso.
-5. OUTPUT FINALE: Calcola il punteggio e produce il report strutturato.
-
-IMPORTANTE SUL FLUSSO:
-- La quantità di domande deve essere inversamente proporzionale alla qualità dell'input
-- Se il brief è completo e il contesto è ricco, potresti non dover fare quasi nessuna domanda
-- Non chiedere MAI informazioni che puoi dedurre dal brief
-- Per i criteri a cui non riesci a rispondere e l'utente non sa rispondere, tratta come "Non so" (0.5x)
-
-SISTEMA DI SCORING — 3 MACRO-AREE, 20 CRITERI, 100 PUNTI:
-
-AREA A — COMMITMENT DEL CLIENTE (30 punti, 9 criteri, ~3.33 pt ciascuno):
-A1. Esiste una gara reale con budget già allocato?
-A2. Il cliente ha visto le credenziali di SBAM prima dell'invito?
-A3. I decisori finali saranno presenti al brief?
-A4. I decisori finali saranno presenti alla presentazione?
-A5. Il numero di agenzie partecipanti è dichiarato?
-A6. I nomi delle agenzie partecipanti sono dichiarati?
-A7. Il budget a disposizione è esplicitato?
-A8. È previsto un rimborso per le agenzie partecipanti?
-A9. Il cliente risponde alle domande chiave su processo e criteri?
-
-AREA B — COMPLETEZZA DELLE INFORMAZIONI (20 punti, 6 criteri, ~3.33 pt ciascuno):
-B1. Gli obiettivi della gara sono chiari?
-B2. L'output richiesto è chiaro e definito?
-B3. I criteri di valutazione delle proposte sono dichiarati?
-B4. L'effort richiesto è commisurato al tempo a disposizione?
-B5. Sono fornite indicazioni per la predisposizione del budget?
-B6. È possibile un confronto diretto col cliente per approfondimenti?
-
-AREA C — OPPORTUNITÀ ECONOMICA (50 punti, 5 criteri, 10 pt ciascuno):
-C1. Il budget della gara è adeguato alla tipologia di progetto richiesto? (NON usare una soglia fissa. La soglia minima dipende dal tipo di deliverable. Usa queste soglie di riferimento SBAM:
-
-SOGLIE MINIME PER TIPOLOGIA DI PROGETTO:
-- SPOT TV/VIDEO CON PRODUZIONE: net revenue agenzia minimo 60k (lavoro semplice) fino a 150k (spot importanti). A questo si aggiunge il budget di produzione (costo esterno per SBAM, girato a case di produzione): da 70k (produzioni piccole) a 800k (produzioni importanti). Se la produzione è realizzata con AI senza girato, la soglia di produzione scende a 30k. ATTENZIONE: se il budget totale include la produzione, devi scorporare il costo di produzione per capire se il fee agenzia è adeguato.
-- GESTIONE CANALI SOCIAL / PED: minimo 40k/anno di net revenue. Solitamente non hanno costi esterni significativi.
-- INFLUENCER MARKETING: soglia minima 50k budget totale incluso costo influencer. Il budget influencer è costo esterno per SBAM, quindi la net revenue reale per l'agenzia è molto inferiore al budget totale.
-- CAMPAGNA INTEGRATA (multi-canale): budget minimo 150k.
-- EVENTO / ATTIVAZIONE: minimo 80k incluso costi di produzione. Ci sono molti costi esterni, sotto questa soglia è impossibile fare qualcosa di sensato.
-- BRAND IDENTITY: soglia minima 30k di net revenue.
-
-PRINCIPI QUALITATIVI per casi non standard:
-- Distingui sempre tra budget totale e net revenue SBAM. I costi esterni (produzione, influencer, venue, media) non sono ricavo per l'agenzia.
-- Se il brief non specifica la split tra fee agenzia e costi esterni, chiedi chiarimenti o segnalalo come criticità.
-- Progetti con alta componente di costi esterni (spot, eventi, influencer) possono avere budget totali alti ma net revenue basse: valuta la net revenue, non il budget lordo.
-- Se la tipologia non rientra in nessuna delle categorie sopra, usa il principio generale: il fee agenzia deve giustificare l'effort richiesto in termini di team, tempo e complessità creativa.)
-C2. Il costo stimato di partecipazione è commisurato alla posta in gioco? (Valutazione qualitativa: l'AI stima la complessità della gara — deliverable richiesti, timeline, risorse presumibili — e la rapporta al valore economico dell'opportunità. Non chiedere all'utente di quantificare il costo: non ha gli strumenti per farlo. Usa il dato medio di 13k solo come contesto generico, mai come stima per la gara specifica.)
-C3. Le agenzie in gara sono massimo 4?
-C4. La durata contrattuale è pluriennale?
-C5. Le agenzie competitor sono di dimensioni e tipologia simili a SBAM?
-
-CALCOLO PUNTEGGIO:
-- Sì = 1.0x (punteggio pieno del criterio)
-- Non so = 0.5x (metà punteggio)
-- No = 0.0x (zero punti)
-- Punteggio Area = (Peso Area / N. Criteri) × Σ(moltiplicatore di ogni criterio)
-- Punteggio Totale = Punteggio A + Punteggio B + Punteggio C
-
-FASCE SEMAFORO:
-- VERDE (75-100): GO — Gara solida, partecipare con convinzione.
-- GIALLO (50-74): VALUTARE — Opportunità con criticità, servono approfondimenti.
-- ROSSO (0-49): NO-GO — Rischio troppo alto, meglio declinare.
-
-DEAL-BREAKER (override automatico):
-- Se le agenzie in gara sono 7 o più → NO-GO AUTOMATICO, indipendentemente dal punteggio totale. Indica una conduzione poco seria della gara da parte del cliente. In questo caso calcola comunque il punteggio per completezza, ma il semaforo è ROSSO e la raccomandazione è NO-GO. Nella raccomandazione spiega chiaramente che il numero di agenzie invitate è un segnale di scarsa serietà del processo e rende la partecipazione antieconomica.
-
-Semaforo per singola area: stesse proporzioni (verde >75%, giallo 50-74%, rosso <50%).
-
-FORMATO OUTPUT FINALE (usa ESATTAMENTE questo formato quando hai tutte le info):
-
-## [EMOJI] PUNTEGGIO: [X]/100 — [COLORE] ([ETICHETTA])
-
-### Breakdown per area
-- **Commitment del Cliente**: [X]/30 [emoji semaforo]
-- **Completezza Informazioni**: [X]/20 [emoji semaforo]
-- **Opportunità Economica**: [X]/50 [emoji semaforo]
-
-### Criteri critici
-[Elenco dei soli criteri con risposta No o Non so, con codice, descrizione e motivazione]
-
-### Raccomandazione
-[Paragrafo di 3-5 righe con azione concreta]
-
-### 💡 Tips & Insight
-[2-3 tips educativi contestualizzati alla gara specifica. Ogni tip deve insegnare qualcosa al client leader sulla gestione delle gare, usando dati concreti. Scegli i tips più rilevanti per la gara in esame tra quelli sotto.]
-
-DATI SBAM 2025 DA USARE NEI TIPS (scegli quelli pertinenti alla gara):
-- Nel 2025 SBAM ha fatto 94 gare (8 al mese), con un win rate del 38% (24 vinte su 63 totali con esito). Benchmark: Dentsu Creative ne fa 35/anno con 200 addetti, We Are Social 35 con 150, TBWA 20 con 130, media UNA 15. SBAM ne ha fatte 94 con 90 persone — una sproporzione enorme che ha impattato la qualità.
-- Le gare nel 2025 sono costate 1.3 milioni di €, pari al 25% dell'intero costo del personale. Significa che 1 ora su 4 dell'agenzia non era billable perché spesa su gare.
-- Le gare "Top" (>100k) invitate nel 2025 (Collistar, Borotalco, Italo, Leroy Merlin, Moleskine, Lavazza, Sephora, Eataly, Groupe SEB) sono state quasi tutte perse, perché farne troppe in contemporanea defocalizza dalle gare grosse.
-- Lezione chiave del 2025: mischiare gare grosse e piccole defocalizza dalle grosse. Meglio farne poche e vincerne di più che farne tante per perderle tutte.
-- La distribuzione clienti SBAM è ancora troppo concentrata sotto i 50k di net revenue. Salire di fascia richiede selezionare gare con soglie più alte.
-- Il rimborso spese non copre i costi, ma è sempre garanzia di serietà del cliente e del processo (raccomandazione SBAM).
-- Secondo il Manifesto "La Buona Gara" (UNA/UPA): una gara seria ha max 3-4 agenzie, budget dichiarato, criteri di valutazione trasparenti, e fornisce feedback ai non vincitori.
-- UNA raccomanda che il numero massimo di agenzie in gara sia 3-4: oltre questo numero la probabilità di vittoria scende drasticamente e il processo perde di serietà.
-
-REGOLE PER I TIPS:
-- Scegli solo 2-3 tips, quelli più rilevanti per la gara specifica
-- Ogni tip deve essere collegato a un aspetto concreto della gara in esame (es: se non c'è rimborso, cita il dato sul costo delle gare; se ci sono troppe agenzie, cita il benchmark)
-- Usa il formato: **Titolo breve del tip.** Spiegazione con dato concreto.
-- I tips servono a educare i client leader, non a ripetere la raccomandazione
-
-Dove:
-- [EMOJI]: 🟢 per verde, 🟡 per giallo, 🔴 per rosso
-- [COLORE]: VERDE, GIALLO, ROSSO
-- [ETICHETTA]: GO, VALUTARE, NO-GO
-
-TONO:
-- Professionale ma diretto, come un senior partner che parla al team
-- Mai prolisso: ogni frase deve aggiungere valore
-- Italiano
-- Quando fai domande, sii specifico e concreto`;
-
-async function callAI(messages) {
+// ─── Secure API call through our backend ───
+async function callAI(system, message) {
   try {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ system: SYSTEM_PROMPT, messages }),
+      body: JSON.stringify({ system, message }),
     });
     const data = await res.json();
     if (data.error) return `Errore: ${data.error}`;
@@ -153,586 +26,324 @@ async function callAI(messages) {
   }
 }
 
-async function extractPdfText(file) {
-  if (!window.pdfjsLib) {
-    await new Promise((res, rej) => {
-      const s = document.createElement("script");
-      s.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-      s.onload = res; s.onerror = rej;
-      document.head.appendChild(s);
-    });
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-  }
-  const buf = await file.arrayBuffer();
-  const pdf = await window.pdfjsLib.getDocument({ data: buf }).promise;
-  const pages = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const text = content.items.map(item => item.str).join(" ");
-    if (text.trim()) pages.push(`[Pagina ${i}]\n${text}`);
-  }
-  return pages.join("\n\n");
-}
-
-// Truncate text to avoid exceeding API token limits
-function truncateText(text, maxChars = 40000) {
-  if (text.length <= maxChars) return text;
-  return text.slice(0, maxChars) + "\n\n[...testo troncato per limiti di lunghezza. Le prime " + Math.round(maxChars / 1000) + "k caratteri sono stati analizzati.]";
-}
-
+// ─── Rich Text Renderer ───
 function RichText({ text }) {
   if (!text) return null;
+  const lines = text.split("\n");
   return (
-    <div style={{ lineHeight: 1.7, color: TEXT, fontSize: 14 }}>
-      {text.split("\n").map((line, i) => {
-        if (line.startsWith("### ")) return <h3 key={i} style={{ color: G, fontSize: 15, fontWeight: 700, margin: "16px 0 6px", fontFamily: "'Space Mono', monospace" }}>{line.slice(4)}</h3>;
-        if (line.startsWith("## ")) {
-          const hasScore = line.match(/🟢|🟡|🔴/);
-          if (hasScore) {
-            const color = line.includes("🟢") ? GREEN : line.includes("🟡") ? YELLOW : RED;
-            return <h2 key={i} style={{ color, fontSize: 20, fontWeight: 700, margin: "20px 0 10px", fontFamily: "'Space Mono', monospace", padding: "14px 18px", background: `${color}12`, borderRadius: 10, borderLeft: `4px solid ${color}` }}>{line.slice(3)}</h2>;
-          }
-          return <h2 key={i} style={{ color: "#fff", fontSize: 17, fontWeight: 700, margin: "20px 0 8px", fontFamily: "'Space Mono', monospace" }}>{line.slice(3)}</h2>;
-        }
-        if (line.startsWith("# ")) return <h1 key={i} style={{ color: "#fff", fontSize: 20, fontWeight: 700, margin: "22px 0 10px", fontFamily: "'Space Mono', monospace" }}>{line.slice(2)}</h1>;
-        if (line.startsWith("- ") || line.startsWith("• ")) {
-          const content = line.slice(2);
-          const hasRed = content.includes("(No)");
-          const hasYellow = content.includes("(Non so)");
-          const indicatorColor = hasRed ? RED : hasYellow ? YELLOW : G;
-          return <div key={i} style={{ display: "flex", gap: 8, marginBottom: 3, paddingLeft: 8 }}><span style={{ color: indicatorColor }}>▸</span><span dangerouslySetInnerHTML={{ __html: boldify(content) }} /></div>;
-        }
-        if (line.startsWith("---")) return <hr key={i} style={{ border: "none", borderTop: `1px solid ${BORDER}`, margin: "12px 0" }} />;
-        if (!line.trim()) return <div key={i} style={{ height: 6 }} />;
-        return <p key={i} style={{ margin: "3px 0" }} dangerouslySetInnerHTML={{ __html: boldify(line) }} />;
+    <div style={{ lineHeight: 1.7, color: TEXT }}>
+      {lines.map((line, i) => {
+        if (line.startsWith("### "))
+          return <h3 key={i} style={{ color: G, fontSize: 16, fontWeight: 700, margin: "20px 0 8px", fontFamily: "'Space Mono', monospace" }}>{line.slice(4)}</h3>;
+        if (line.startsWith("## "))
+          return <h2 key={i} style={{ color: "#fff", fontSize: 20, fontWeight: 700, margin: "24px 0 10px", fontFamily: "'Space Mono', monospace" }}>{line.slice(3)}</h2>;
+        if (line.startsWith("# "))
+          return <h1 key={i} style={{ color: "#fff", fontSize: 24, fontWeight: 700, margin: "28px 0 12px", fontFamily: "'Space Mono', monospace" }}>{line.slice(2)}</h1>;
+        if (line.startsWith("- ") || line.startsWith("• "))
+          return <div key={i} style={{ display: "flex", gap: 8, marginBottom: 4, paddingLeft: 8 }}><span style={{ color: G }}>▸</span><span dangerouslySetInnerHTML={{ __html: boldify(line.slice(2)) }} /></div>;
+        if (line.startsWith("---"))
+          return <hr key={i} style={{ border: "none", borderTop: `1px solid ${BORDER}`, margin: "16px 0" }} />;
+        if (line.trim() === "") return <div key={i} style={{ height: 10 }} />;
+        return <p key={i} style={{ margin: "4px 0" }} dangerouslySetInnerHTML={{ __html: boldify(line) }} />;
       })}
     </div>
   );
 }
-function boldify(t) { return t.replace(/\*\*(.*?)\*\*/g, `<strong style="color:#fff;font-weight:600">$1</strong>`); }
+function boldify(t) {
+  return t.replace(/\*\*(.*?)\*\*/g, `<strong style="color:#fff;font-weight:600">$1</strong>`);
+}
 
-function ChatMessage({ msg }) {
-  const isUser = msg.role === "user";
+// ─── Shared Components ───
+function TextArea({ value, onChange, placeholder, rows = 8 }) {
   return (
-    <div style={{ display: "flex", justifyContent: isUser ? "flex-end" : "flex-start", marginBottom: 14, animation: "fadeIn 0.3s ease" }}>
-      <div style={{
-        maxWidth: isUser ? "75%" : "92%",
-        padding: isUser ? "11px 15px" : "18px 22px",
-        borderRadius: isUser ? "14px 14px 4px 14px" : "14px 14px 14px 4px",
-        background: isUser ? `${G}15` : CARD,
-        border: `1px solid ${isUser ? `${G}28` : BORDER}`,
-        borderLeft: isUser ? undefined : `3px solid ${G}`,
-      }}>
-        {isUser ? (
-          <>
-            {msg.fileName && <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, padding: "5px 9px", background: `${G}10`, borderRadius: 6, fontSize: 12, color: G }}>📄 {msg.fileName}</div>}
-            <div style={{ color: TEXT, fontSize: 14, lineHeight: 1.6, whiteSpace: "pre-wrap" }}>{msg.displayText || msg.content}</div>
-          </>
-        ) : <RichText text={msg.content} />}
-      </div>
-    </div>
+    <textarea value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} rows={rows}
+      style={{ width: "100%", background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 10, color: "#fff", padding: "14px 16px", fontSize: 14, fontFamily: "'DM Sans', sans-serif", resize: "vertical", outline: "none", transition: "border-color 0.2s", boxSizing: "border-box" }}
+      onFocus={(e) => (e.target.style.borderColor = G)} onBlur={(e) => (e.target.style.borderColor = BORDER)} />
   );
 }
 
-// ─── PDF Report Generation ───
-async function generatePDF(reportText) {
-  if (!window.jspdf) {
-    await new Promise((res, rej) => {
-      const s = document.createElement("script");
-      s.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
-      s.onload = res; s.onerror = rej;
-      document.head.appendChild(s);
-    });
-  }
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ unit: "mm", format: "a4" });
-  const W = 210, H = 297;
-  const ML = 20, MR = 20, MT = 20;
-  const contentW = W - ML - MR;
-  let y = MT;
-
-  const addPage = () => { doc.addPage(); y = MT; };
-  const checkSpace = (needed) => { if (y + needed > H - 25) addPage(); };
-
-  // Header bar
-  doc.setFillColor(26, 26, 46);
-  doc.rect(0, 0, W, 16, "F");
-  doc.setFont("helvetica", "bold");
-  doc.setFontSize(10);
-  doc.setTextColor(200, 230, 74);
-  doc.text("SBAM.ai", ML, 10.5);
-  doc.setTextColor(180, 180, 180);
-  doc.setFont("helvetica", "normal");
-  doc.text("Pitch Screener — Report di Valutazione", ML + 22, 10.5);
-  doc.setFontSize(8);
-  doc.text(new Date().toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" }), W - MR, 10.5, { align: "right" });
-
-  y = 26;
-
-  // Parse the report
-  const lines = reportText.split("\n");
-  
-  for (const line of lines) {
-    if (line.startsWith("## ")) {
-      const text = line.slice(3).replace(/🟢|🟡|🔴/g, "").trim();
-      const hasGreen = line.includes("🟢");
-      const hasYellow = line.includes("🟡");
-      const hasRed = line.includes("🔴");
-      
-      checkSpace(18);
-      
-      if (line.includes("PUNTEGGIO")) {
-        // Score banner
-        const color = hasGreen ? [39,174,96] : hasYellow ? [243,156,18] : [231,76,60];
-        doc.setFillColor(...color);
-        doc.roundedRect(ML, y, contentW, 14, 3, 3, "F");
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(14);
-        doc.setTextColor(255, 255, 255);
-        doc.text(text, ML + contentW / 2, y + 9.5, { align: "center" });
-        y += 20;
-      } else {
-        doc.setFont("helvetica", "bold");
-        doc.setFontSize(13);
-        doc.setTextColor(15, 52, 96);
-        doc.text(text, ML, y + 5);
-        y += 10;
-        doc.setDrawColor(200, 230, 74);
-        doc.setLineWidth(0.5);
-        doc.line(ML, y - 3, ML + 30, y - 3);
-      }
-    } else if (line.startsWith("### ")) {
-      checkSpace(12);
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(11);
-      doc.setTextColor(26, 26, 46);
-      const text = line.slice(4).replace(/💡/g, "").trim();
-      doc.text(text, ML, y + 5);
-      y += 10;
-    } else if (line.startsWith("- ")) {
-      checkSpace(10);
-      const content = line.slice(2).replace(/\*\*/g, "");
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(60, 60, 60);
-      const splitLines = doc.splitTextToSize("• " + content, contentW - 5);
-      doc.text(splitLines, ML + 3, y + 4);
-      y += splitLines.length * 4.5 + 2;
-    } else if (line.trim() && !line.startsWith("---")) {
-      checkSpace(8);
-      const content = line.replace(/\*\*/g, "");
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(9);
-      doc.setTextColor(60, 60, 60);
-      const splitLines = doc.splitTextToSize(content, contentW);
-      doc.text(splitLines, ML, y + 4);
-      y += splitLines.length * 4.5 + 1;
-    }
-  }
-
-  // Footer
-  checkSpace(20);
-  y += 8;
-  doc.setDrawColor(220, 220, 220);
-  doc.line(ML, y, W - MR, y);
-  y += 6;
-  doc.setFontSize(7);
-  doc.setTextColor(150, 150, 150);
-  doc.text("SBAM — Part of JAKALA · Pitch Screener powered by Claude AI · Documento generato automaticamente", ML, y);
-
-  doc.save("SBAM_PitchScreener_Report.pdf");
+function Input({ value, onChange, placeholder, style: extraStyle = {} }) {
+  return (
+    <input value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}
+      style={{ flex: 1, background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 8, color: "#fff", padding: "10px 14px", fontSize: 14, fontFamily: "'DM Sans', sans-serif", outline: "none", ...extraStyle }}
+      onFocus={(e) => (e.target.style.borderColor = G)} onBlur={(e) => (e.target.style.borderColor = BORDER)} />
+  );
 }
 
-// ─── Download Button ───
-function DownloadButton({ reportText }) {
-  const [generating, setGenerating] = useState(false);
-  const handleClick = async () => {
-    setGenerating(true);
-    try { await generatePDF(reportText); } catch (e) { alert("Errore nella generazione del PDF."); }
-    setGenerating(false);
-  };
+function Btn({ onClick, loading, children, variant = "primary", disabled }) {
+  const p = variant === "primary";
   return (
-    <button onClick={handleClick} disabled={generating}
-      style={{
-        display: "flex", alignItems: "center", gap: 6, padding: "8px 16px",
-        background: `${G}15`, border: `1px solid ${G}40`, borderRadius: 8,
-        color: G, fontSize: 12, fontFamily: "'Space Mono', monospace",
-        cursor: generating ? "wait" : "pointer", transition: "all 0.15s",
-      }}
-      onMouseEnter={e => { e.currentTarget.style.background = `${G}25`; e.currentTarget.style.borderColor = G; }}
-      onMouseLeave={e => { e.currentTarget.style.background = `${G}15`; e.currentTarget.style.borderColor = `${G}40`; }}
-    >
-      {generating ? "⏳ Generazione..." : "📥 Scarica Report PDF"}
+    <button onClick={onClick} disabled={loading || disabled}
+      style={{ padding: "12px 28px", background: p ? G : "transparent", color: p ? "#000" : G, border: p ? "none" : `1px solid ${G}`, borderRadius: 8, fontWeight: 700, fontSize: 14, fontFamily: "'Space Mono', monospace", cursor: loading || disabled ? "not-allowed" : "pointer", opacity: loading || disabled ? 0.5 : 1, transition: "all 0.2s", letterSpacing: "0.5px", textTransform: "uppercase", display: "flex", alignItems: "center", gap: 8 }}>
+      {loading && <span style={{ width: 16, height: 16, border: "2px solid rgba(0,0,0,0.2)", borderTopColor: "#000", borderRadius: "50%", display: "inline-block", animation: "spin 0.6s linear infinite" }} />}
+      {children}
     </button>
   );
 }
 
-// ─── Board Mail Generator ───
-const MAIL_SYSTEM_PROMPT = `Sei un membro del team SBAM che scrive una mail informale al board dell'agenzia per presentare una nuova opportunità di gara appena valutata con il Pitch Screener.
-
-FORMATO DELLA MAIL:
-Oggetto: [emoji semaforo] Nuova gara: [Nome Cliente] — [GO/VALUTARE/NO-GO]
-
-Corpo:
-- Saluto informale e amichevole
-- Cliente e contesto
-- Sintesi del brief (2-3 righe: cosa chiede il cliente)
-- Scope in caso di vittoria (cosa vinciamo concretamente: tipo di incarico, durata, valore)
-- Deliverable richiesti per partecipare alla gara (cosa dobbiamo preparare)
-- Data di consegna della gara
-- Considerazioni sintetiche dello screener con punteggio e ranking
-- Chiusura simpatica
-
-TONO:
-- Informale, carina, amichevole
-- Un pizzico di ironia e buon umore (senza esagerare)
-- Come se scrivessi a colleghi con cui lavori bene
-- In italiano
-- Concisa: la mail deve essere scannerizzabile in 30 secondi
-
-REGOLE:
-- Se qualche informazione non è disponibile dal report, omettila senza inventare
-- Il punteggio e il semaforo devono essere riportati fedelmente
-- Non aggiungere tips o analisi lunghe: è una mail operativa, non un report
-- Scrivi SOLO il testo della mail (oggetto + corpo), nient'altro`;
-
-function BoardMailButton({ reportText }) {
-  const [state, setState] = useState("idle"); // idle | loading | done
-  const [mailText, setMailText] = useState("");
-  const [copied, setCopied] = useState(false);
-
-  const handleGenerate = async () => {
-    setState("loading");
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          system: MAIL_SYSTEM_PROMPT,
-          messages: [{ role: "user", content: `Ecco il report del Pitch Screener. Scrivi la mail per il board basandoti su queste informazioni:\n\n${reportText}` }],
-        }),
-      });
-      const data = await res.json();
-      if (data.error) { alert(data.error); setState("idle"); return; }
-      setMailText(data.text || "Errore nella generazione.");
-      setState("done");
-    } catch (e) {
-      alert("Errore di connessione. Riprova.");
-      setState("idle");
-    }
-  };
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(mailText).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  };
-
-  if (state === "done") {
-    return (
-      <div style={{ marginTop: 10, animation: "fadeIn 0.3s ease" }}>
-        <div style={{
-          background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10,
-          padding: "16px 18px", maxWidth: "92%",
-        }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-            <span style={{ fontSize: 12, fontFamily: "'Space Mono', monospace", color: G }}>✉️ MAIL PER IL BOARD</span>
-            <button onClick={handleCopy}
-              style={{
-                padding: "5px 12px", background: copied ? `${GREEN}20` : `${G}15`,
-                border: `1px solid ${copied ? GREEN : `${G}40`}`, borderRadius: 6,
-                color: copied ? GREEN : G, fontSize: 11, fontFamily: "'Space Mono', monospace",
-                cursor: "pointer", transition: "all 0.15s",
-              }}>
-              {copied ? "✓ Copiato!" : "📋 Copia"}
-            </button>
-          </div>
-          <div style={{
-            color: TEXT, fontSize: 13, lineHeight: 1.7, whiteSpace: "pre-wrap",
-            background: DARKER, borderRadius: 8, padding: "14px 16px",
-            border: `1px solid ${BORDER}`, maxHeight: 400, overflowY: "auto",
-          }}>
-            {mailText}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
+function ResultBox({ result, title }) {
+  if (!result) return null;
   return (
-    <button onClick={handleGenerate} disabled={state === "loading"}
-      style={{
-        display: "flex", alignItems: "center", gap: 6, padding: "8px 16px",
-        background: `${G}15`, border: `1px solid ${G}40`, borderRadius: 8,
-        color: G, fontSize: 12, fontFamily: "'Space Mono', monospace",
-        cursor: state === "loading" ? "wait" : "pointer", transition: "all 0.15s",
-      }}
-      onMouseEnter={e => { e.currentTarget.style.background = `${G}25`; e.currentTarget.style.borderColor = G; }}
-      onMouseLeave={e => { e.currentTarget.style.background = `${G}15`; e.currentTarget.style.borderColor = `${G}40`; }}
-    >
-      {state === "loading" ? "⏳ Generazione mail..." : "✉️ Genera mail per il board"}
-    </button>
-  );
-}
-
-function LoadingBubble() {
-  return (
-    <div style={{ display: "flex", justifyContent: "flex-start", marginBottom: 14 }}>
-      <div style={{ padding: "14px 20px", borderRadius: "14px 14px 14px 4px", background: CARD, border: `1px solid ${BORDER}`, borderLeft: `3px solid ${G}` }}>
-        <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
-          {[0, 0.15, 0.3].map((d, i) => <span key={i} style={{ width: 7, height: 7, borderRadius: "50%", background: G, animation: `pulse 1s ease-in-out ${d}s infinite` }} />)}
-          <span style={{ color: MUTED, fontSize: 11, marginLeft: 6, fontFamily: "'Space Mono', monospace" }}>Sto analizzando...</span>
-        </div>
-      </div>
+    <div style={{ marginTop: 24, padding: 24, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 12, borderLeft: `3px solid ${G}`, animation: "fadeIn 0.4s ease" }}>
+      {title && <div style={{ fontSize: 11, fontFamily: "'Space Mono', monospace", color: G, letterSpacing: 2, textTransform: "uppercase", marginBottom: 12 }}>{title}</div>}
+      <RichText text={result} />
     </div>
   );
 }
 
-export default function Page() {
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
+function ToolHeader({ icon, title, subtitle }) {
+  return (
+    <div style={{ marginBottom: 24 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 6 }}>
+        <span style={{ fontSize: 28 }}>{icon}</span>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: "#fff", fontFamily: "'Space Mono', monospace", margin: 0 }}>{title}</h2>
+      </div>
+      <p style={{ color: MUTED, fontSize: 14, margin: 0, paddingLeft: 42 }}>{subtitle}</p>
+    </div>
+  );
+}
+
+// ─── TOOL 1: Brief Analyzer ───
+function BriefAnalyzer() {
+  const [brief, setBrief] = useState("");
+  const [result, setResult] = useState("");
   const [loading, setLoading] = useState(false);
-  const [uploadedFile, setUploadedFile] = useState(null);
-  const [processingFile, setProcessingFile] = useState(false);
-  const [started, setStarted] = useState(false);
-  const chatEndRef = useRef(null);
-  const inputRef = useRef(null);
-
-  useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, loading]);
-
-  const handleFile = async (file) => {
-    if (!file) return;
-    setProcessingFile(true);
-    try {
-      if (file.size > 50 * 1024 * 1024) { alert("File troppo grande (max 50 MB)"); setProcessingFile(false); return; }
-      const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-      let text;
-      if (isPdf) {
-        text = await extractPdfText(file);
-        if (text.trim().length < 50) alert("Il PDF sembra contenere principalmente immagini. Prova ad aggiungere le informazioni nel campo di testo.");
-      } else {
-        text = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsText(file); });
-      }
-      setUploadedFile({ name: file.name, text, size: file.size });
-    } catch { alert("Errore nella lettura del file."); }
-    setProcessingFile(false);
+  const analyze = async () => {
+    setLoading(true); setResult("");
+    const sys = `Sei un senior strategist di SBAM, agenzia creativa part of JAKALA. Analizzi brief di clienti con occhio critico e costruttivo.\nRispondi SEMPRE in italiano. Usa questo formato:\n\n## Sintesi del Brief\n(riassumi in 2-3 righe l'essenza della richiesta)\n\n## Insight Chiave\n(3-5 insight strategici che emergono dal brief)\n\n## Gap & Domande Critiche\n(cosa manca nel brief? quali informazioni servono?)\n\n## Opportunità Nascoste\n(cosa il cliente non ha chiesto ma potrebbe volere)\n\n## Red Flags\n(potenziali rischi o ambiguità da chiarire subito)\n\n## Prossimi Step Consigliati\n(azioni concrete per procedere)\n\nSii diretto, concreto, e usa il linguaggio tipico di un'agenzia creativa italiana top.`;
+    const res = await callAI(sys, `Analizza questo brief cliente:\n\n${brief}`);
+    setResult(res); setLoading(false);
   };
+  return (
+    <div>
+      <ToolHeader icon="🔍" title="Brief Analyzer" subtitle="Carica un brief cliente → estrai insight, gap e domande chiave" />
+      <TextArea value={brief} onChange={setBrief} placeholder="Incolla qui il brief del cliente..." rows={10} />
+      <div style={{ marginTop: 16, display: "flex", gap: 12 }}>
+        <Btn onClick={analyze} loading={loading} disabled={!brief.trim()}>Analizza Brief</Btn>
+        {brief && <Btn variant="secondary" onClick={() => { setBrief(""); setResult(""); }}>Reset</Btn>}
+      </div>
+      <ResultBox result={result} title="Analisi del Brief" />
+    </div>
+  );
+}
 
-  const send = async () => {
-    const trimmed = input.trim();
-    if (!trimmed && !uploadedFile) return;
-
-    let fullContent = "";
-    let displayText = trimmed;
-    let fileName = null;
-    if (uploadedFile) { fullContent += `[Contenuto del brief: "${uploadedFile.name}"]\n${uploadedFile.text}\n\n`; fileName = uploadedFile.name; }
-    if (trimmed) fullContent += `[Contesto aggiuntivo fornito dall'utente]\n${trimmed}`;
-
-    const userMsg = { role: "user", content: fullContent, displayText: displayText || "(Brief caricato)", fileName };
-    const newMessages = [...messages, userMsg];
-    setMessages(newMessages);
-    setInput(""); setUploadedFile(null); setLoading(true); setStarted(true);
-
-    const apiMessages = newMessages.map(m => ({ role: m.role, content: m.content }));
-    const reply = await callAI(apiMessages);
-    setMessages([...newMessages, { role: "assistant", content: reply }]);
-    setLoading(false);
-    inputRef.current?.focus();
+// ─── TOOL 2: Strategy Generator ───
+function StrategyGenerator() {
+  const [brief, setBrief] = useState("");
+  const [industry, setIndustry] = useState("");
+  const [budget, setBudget] = useState("");
+  const [result, setResult] = useState("");
+  const [loading, setLoading] = useState(false);
+  const generate = async () => {
+    setLoading(true); setResult("");
+    const sys = `Sei il Chief Strategy Officer di SBAM (part of JAKALA). Generi proposte strategiche complete partendo da brief.\nRispondi SEMPRE in italiano. Il tuo approccio è "Radical Simplicity": idee semplici, forti, che fanno parlare.\n\nUsa questo formato:\n\n## Executive Summary\n(la strategia in 3 righe)\n\n## Target Audience\n### Primario\n(descrizione dettagliata, insight comportamentali)\n### Secondario\n(audience secondaria)\n\n## Posizionamento & Tone of Voice\n(come il brand deve posizionarsi e parlare)\n\n## Strategia Canali\n(quali canali usare e perché, con priorità)\n\n## Big Idea\n(il concept creativo centrale — simple & loud)\n\n## Pillar di Comunicazione\n(3-4 pillar tematici su cui costruire i contenuti)\n\n## KPI Suggeriti\n(metriche concrete per misurare il successo)\n\n## Timeline Indicativa\n(macro fasi del progetto)\n\nSii ambizioso ma realistico. Pensa come un'agenzia che deve vincere la gara.`;
+    const userMsg = `Brief: ${brief}\n${industry ? `Settore: ${industry}` : ""}\n${budget ? `Budget indicativo: ${budget}` : ""}`;
+    const res = await callAI(sys, userMsg);
+    setResult(res); setLoading(false);
   };
+  return (
+    <div>
+      <ToolHeader icon="🎯" title="Strategy Generator" subtitle="Dal brief alla proposta strategica con target, tone of voice e canali" />
+      <TextArea value={brief} onChange={setBrief} placeholder="Inserisci il brief o il contesto del progetto..." rows={8} />
+      <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
+        <Input value={industry} onChange={setIndustry} placeholder="Settore (es. Fashion, Food...)" />
+        <Input value={budget} onChange={setBudget} placeholder="Budget (opzionale)" />
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <Btn onClick={generate} loading={loading} disabled={!brief.trim()}>Genera Strategia</Btn>
+      </div>
+      <ResultBox result={result} title="Proposta Strategica" />
+    </div>
+  );
+}
 
-  const handleKeyDown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
-  const formatSize = (b) => b < 1024 ? b + " B" : b < 1048576 ? (b / 1024).toFixed(1) + " KB" : (b / 1048576).toFixed(1) + " MB";
-  const resetSession = () => { setMessages([]); setUploadedFile(null); setInput(""); setStarted(false); };
+// ─── TOOL 3: Competitor & Trend Scanner ───
+function CompetitorScanner() {
+  const [brand, setBrand] = useState("");
+  const [competitors, setCompetitors] = useState("");
+  const [sector, setSector] = useState("");
+  const [result, setResult] = useState("");
+  const [loading, setLoading] = useState(false);
+  const scan = async () => {
+    setLoading(true); setResult("");
+    const sys = `Sei un senior strategist di SBAM specializzato in competitive intelligence e trend analysis per il mercato italiano ed europeo.\nRispondi SEMPRE in italiano. Analizza il panorama competitivo e i trend rilevanti.\n\nUsa questo formato:\n\n## Overview del Mercato\n(contesto e dinamiche principali del settore)\n\n## Analisi Competitor\n(per ogni competitor: posizionamento, punti di forza, debolezze, strategia di comunicazione)\n\n## Trend Rilevanti\n### Macro Trend\n(trend di settore a livello macro)\n### Micro Trend\n(trend emergenti e nicchie da esplorare)\n### Trend Social & Content\n(cosa funziona in comunicazione nel settore)\n\n## White Space & Opportunità\n(dove i competitor non sono presenti? dove c'è spazio?)\n\n## Minacce\n(rischi competitivi da monitorare)\n\n## Raccomandazioni per il Brand\n(come differenziarsi concretamente)\n\nBasa la tua analisi sulla tua conoscenza del mercato. Sii specifico e azionabile.`;
+    const userMsg = `Brand/Azienda: ${brand}\n${competitors ? `Competitor principali: ${competitors}` : ""}\n${sector ? `Settore: ${sector}` : ""}`;
+    const res = await callAI(sys, userMsg);
+    setResult(res); setLoading(false);
+  };
+  return (
+    <div>
+      <ToolHeader icon="📡" title="Competitor & Trend Scanner" subtitle="Analisi competitor e trend di settore dal brief" />
+      <Input value={brand} onChange={setBrand} placeholder="Brand o azienda da analizzare" style={{ width: "100%", marginBottom: 12, flex: "none" }} />
+      <div style={{ display: "flex", gap: 12 }}>
+        <Input value={competitors} onChange={setCompetitors} placeholder="Competitor noti (opzionale)" />
+        <Input value={sector} onChange={setSector} placeholder="Settore" />
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <Btn onClick={scan} loading={loading} disabled={!brand.trim()}>Scansiona Mercato</Btn>
+      </div>
+      <ResultBox result={result} title="Analisi Competitiva & Trend" />
+    </div>
+  );
+}
+
+// ─── TOOL 4: Creative Concept Generator ───
+function CreativeConceptGen() {
+  const [strategy, setStrategy] = useState("");
+  const [constraints, setConstraints] = useState("");
+  const [numConcepts, setNumConcepts] = useState("3");
+  const [result, setResult] = useState("");
+  const [loading, setLoading] = useState(false);
+  const generate = async () => {
+    setLoading(true); setResult("");
+    const sys = `Sei il Chief Creative Officer di SBAM. Generi concept creativi brillanti, semplici e impattanti, seguendo la filosofia "Radical Simplicity".\nRispondi SEMPRE in italiano. Genera ${numConcepts} concept creativi distinti. Per ciascuno usa questo formato:\n\n### Concept [N]: [Nome del Concept]\n\n**La Big Idea in una frase**\n(il concept sintetizzato in modo memorabile)\n\n**Insight di partenza**\n(l'insight umano/culturale su cui si basa)\n\n**Esecuzione**\n(come prende vita concretamente: canali, formati, meccaniche)\n\n**Headline/Claim**\n(proposta di headline o claim principale)\n\n**Tono**\n(registro comunicativo)\n\n**Perché funziona**\n(motivazione strategica)\n\n---\n\nSii audace, sorprendente, culturalmente rilevante. I concept devono essere "simple & loud" — facili da capire, impossibili da ignorare.`;
+    const userMsg = `Strategia/Brief di partenza:\n${strategy}\n${constraints ? `\nVincoli/Note: ${constraints}` : ""}`;
+    const res = await callAI(sys, userMsg);
+    setResult(res); setLoading(false);
+  };
+  return (
+    <div>
+      <ToolHeader icon="💡" title="Creative Concept Generator" subtitle="Genera concept creativi a partire dalla strategia — Simple & Loud" />
+      <TextArea value={strategy} onChange={setStrategy} placeholder="Incolla la strategia o il brief su cui generare i concept..." rows={8} />
+      <div style={{ display: "flex", gap: 12, marginTop: 12, alignItems: "center" }}>
+        <Input value={constraints} onChange={setConstraints} placeholder="Vincoli o note aggiuntive (opzionale)" />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span style={{ color: MUTED, fontSize: 13, fontFamily: "'Space Mono', monospace", whiteSpace: "nowrap" }}>N° concept:</span>
+          <select value={numConcepts} onChange={(e) => setNumConcepts(e.target.value)}
+            style={{ background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 8, color: "#fff", padding: "10px 12px", fontSize: 14, fontFamily: "'DM Sans', sans-serif", outline: "none", cursor: "pointer" }}>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+          </select>
+        </div>
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <Btn onClick={generate} loading={loading} disabled={!strategy.trim()}>Genera Concept</Btn>
+      </div>
+      <ResultBox result={result} title="Concept Creativi" />
+    </div>
+  );
+}
+
+// ─── Navigation ───
+const TOOLS = [
+  { id: "home", label: "Home", icon: "⚡" },
+  { id: "brief", label: "Brief Analyzer", icon: "🔍" },
+  { id: "strategy", label: "Strategy Gen", icon: "🎯" },
+  { id: "competitor", label: "Trend Scanner", icon: "📡" },
+  { id: "creative", label: "Concept Gen", icon: "💡" },
+];
+
+// ─── Home Page ───
+function Home({ onNavigate }) {
+  const cards = [
+    { id: "brief", icon: "🔍", title: "Brief Analyzer", desc: "Analizza brief clienti, estrai insight strategici, identifica gap e domande chiave.", tag: "ANALYSIS" },
+    { id: "strategy", icon: "🎯", title: "Strategy Generator", desc: "Dal brief alla proposta strategica completa: target, posizionamento, canali, KPI.", tag: "STRATEGY" },
+    { id: "competitor", icon: "📡", title: "Competitor & Trend Scanner", desc: "Scansiona il mercato: analisi competitor, trend emergenti, white space.", tag: "INTELLIGENCE" },
+    { id: "creative", icon: "💡", title: "Creative Concept Generator", desc: "Genera concept creativi Simple & Loud a partire dalla strategia.", tag: "CREATIVE" },
+  ];
+  return (
+    <div style={{ maxWidth: 900, margin: "0 auto" }}>
+      <div style={{ textAlign: "center", padding: "60px 20px 50px", position: "relative" }}>
+        <div style={{ position: "absolute", top: "50%", left: "50%", transform: "translate(-50%, -50%)", width: 400, height: 400, background: `radial-gradient(circle, ${G}08 0%, transparent 70%)`, pointerEvents: "none" }} />
+        <div style={{ fontSize: 11, fontFamily: "'Space Mono', monospace", color: G, letterSpacing: 4, textTransform: "uppercase", marginBottom: 20 }}>AI-Powered Creative Suite</div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginBottom: 16 }}>
+          <img src="/logo.png" alt="SBAM" style={{ height: 52, objectFit: "contain" }} />
+          <span style={{ fontSize: 48, fontWeight: 800, color: G, fontFamily: "'Space Mono', monospace", opacity: 0.6 }}>.ai</span>
+        </div>
+        <p style={{ fontSize: 18, color: MUTED, maxWidth: 500, margin: "0 auto 8px", lineHeight: 1.6, fontFamily: "'DM Sans', sans-serif" }}>La suite AI interna per il team SBAM.</p>
+        <p style={{ fontSize: 15, color: MUTED, maxWidth: 500, margin: "0 auto", fontFamily: "'DM Sans', sans-serif", fontStyle: "italic" }}>Radical Simplicity, superpowered by AI.</p>
+      </div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16, padding: "0 20px" }}>
+        {cards.map((card) => (
+          <div key={card.id} onClick={() => onNavigate(card.id)}
+            style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 14, padding: 28, cursor: "pointer", transition: "all 0.25s ease", position: "relative", overflow: "hidden" }}
+            onMouseEnter={(e) => { e.currentTarget.style.borderColor = G; e.currentTarget.style.transform = "translateY(-2px)"; e.currentTarget.style.boxShadow = `0 8px 30px ${G}15`; }}
+            onMouseLeave={(e) => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.transform = "translateY(0)"; e.currentTarget.style.boxShadow = "none"; }}>
+            <div style={{ fontSize: 10, fontFamily: "'Space Mono', monospace", color: G, letterSpacing: 2, marginBottom: 14 }}>{card.tag}</div>
+            <div style={{ fontSize: 30, marginBottom: 12 }}>{card.icon}</div>
+            <h3 style={{ fontSize: 18, fontWeight: 700, color: "#fff", margin: "0 0 8px", fontFamily: "'Space Mono', monospace" }}>{card.title}</h3>
+            <p style={{ fontSize: 13, color: MUTED, margin: 0, lineHeight: 1.5 }}>{card.desc}</p>
+            <div style={{ position: "absolute", bottom: 16, right: 20, color: G, fontSize: 20, opacity: 0.5 }}>→</div>
+          </div>
+        ))}
+      </div>
+      <div style={{ textAlign: "center", padding: "50px 20px 30px", color: MUTED, fontSize: 12, fontFamily: "'Space Mono', monospace" }}>
+        SBAM — Part of JAKALA · AI Suite Internal Tool · 2026
+      </div>
+    </div>
+  );
+}
+
+// ─── Main App ───
+export default function Page() {
+  const [activeTool, setActiveTool] = useState("home");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+  const renderTool = () => {
+    switch (activeTool) {
+      case "brief": return <BriefAnalyzer />;
+      case "strategy": return <StrategyGenerator />;
+      case "competitor": return <CompetitorScanner />;
+      case "creative": return <CreativeConceptGen />;
+      default: return <Home onNavigate={setActiveTool} />;
+    }
+  };
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", background: DARK, fontFamily: "'DM Sans', sans-serif", overflow: "hidden" }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=DM+Sans:wght@400;500;600;700&display=swap');
-        @keyframes spin { to { transform: rotate(360deg); } }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-        @keyframes pulse { 0%,100% { opacity: 0.25; transform: scale(0.8); } 50% { opacity: 1; transform: scale(1); } }
-        @keyframes float { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
-        * { box-sizing: border-box; }
-        ::-webkit-scrollbar { width: 5px; }
-        ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: ${BORDER}; border-radius: 3px; }
-        ::selection { background: ${G}33; color: #fff; }
-      `}</style>
-
-      {/* Header */}
-      <div style={{ padding: "12px 24px", borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", gap: 12, flexShrink: 0, background: DARKER }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <img src="/logo.png" alt="SBAM" style={{ height: 22, objectFit: "contain" }} />
-          <span style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, fontSize: 14, color: G, opacity: 0.65 }}>.ai</span>
+    <div style={{ display: "flex", height: "100vh", background: DARK, fontFamily: "'DM Sans', sans-serif", overflow: "hidden" }}>
+      {/* Sidebar */}
+      <div style={{ width: sidebarCollapsed ? 60 : 220, background: DARKER, borderRight: `1px solid ${BORDER}`, display: "flex", flexDirection: "column", transition: "width 0.25s ease", flexShrink: 0 }}>
+        <div style={{ padding: sidebarCollapsed ? "20px 10px" : "20px 18px", borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "space-between", minHeight: 65 }}>
+          {!sidebarCollapsed && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <img src="/logo.png" alt="SBAM" style={{ height: 22, objectFit: "contain" }} />
+              <span style={{ fontFamily: "'Space Mono', monospace", fontWeight: 700, fontSize: 14, color: G, opacity: 0.7 }}>.ai</span>
+            </div>
+          )}
+          <button onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+            style={{ background: "none", border: "none", color: MUTED, cursor: "pointer", fontSize: 16, padding: 4, display: "flex", margin: sidebarCollapsed ? "0 auto" : 0 }}>
+            {sidebarCollapsed ? "▶" : "◀"}
+          </button>
         </div>
-        <div style={{ width: 1, height: 20, background: BORDER }} />
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <span style={{ fontSize: 18 }}>⚖️</span>
-          <div>
-            <h1 style={{ fontSize: 15, fontWeight: 700, color: "#fff", fontFamily: "'Space Mono', monospace", margin: 0 }}>Pitch Screener</h1>
-            <p style={{ color: MUTED, fontSize: 10, margin: 0, fontFamily: "'Space Mono', monospace" }}>Sistema di valutazione gare</p>
+        <nav style={{ flex: 1, padding: "12px 8px" }}>
+          {TOOLS.map((tool) => {
+            const active = activeTool === tool.id;
+            return (
+              <button key={tool.id} onClick={() => setActiveTool(tool.id)}
+                style={{
+                  width: "100%", display: "flex", alignItems: "center", gap: 10,
+                  padding: sidebarCollapsed ? "10px 0" : "10px 12px",
+                  justifyContent: sidebarCollapsed ? "center" : "flex-start",
+                  background: active ? `${G}12` : "transparent",
+                  border: "none", borderRadius: 8,
+                  color: active ? G : MUTED,
+                  cursor: "pointer", fontSize: 13, fontFamily: "'Space Mono', monospace",
+                  fontWeight: active ? 700 : 400, marginBottom: 4, transition: "all 0.15s",
+                  borderLeft: active ? `2px solid ${G}` : "2px solid transparent",
+                }}
+                onMouseEnter={(e) => { if (!active) e.currentTarget.style.color = "#fff"; }}
+                onMouseLeave={(e) => { if (!active) e.currentTarget.style.color = active ? G : MUTED; }}
+                title={sidebarCollapsed ? tool.label : ""}>
+                <span style={{ fontSize: 16 }}>{tool.icon}</span>
+                {!sidebarCollapsed && <span>{tool.label}</span>}
+              </button>
+            );
+          })}
+        </nav>
+        {!sidebarCollapsed && (
+          <div style={{ padding: "16px 18px", borderTop: `1px solid ${BORDER}`, fontSize: 10, color: MUTED, fontFamily: "'Space Mono', monospace" }}>
+            Powered by Claude AI<br />Part of JAKALA
           </div>
-        </div>
-        <div style={{ flex: 1 }} />
-        {started && (
-          <button onClick={resetSession}
-            style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 6, color: MUTED, cursor: "pointer", padding: "5px 12px", fontSize: 11, fontFamily: "'Space Mono', monospace", transition: "all 0.15s" }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "#fff"; e.currentTarget.style.color = "#fff"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.color = MUTED; }}
-          >Nuova valutazione</button>
         )}
       </div>
 
       {/* Main Content */}
-      <div style={{ flex: 1, overflow: "hidden", display: "flex", flexDirection: "column", maxWidth: 860, width: "100%", margin: "0 auto", padding: "0 20px" }}>
-        <div style={{ flex: 1, overflowY: "auto", padding: "10px 0" }}>
-          {!started ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: "100%", padding: "40px 0" }}>
-              <div style={{ position: "relative", marginBottom: 28 }}>
-                <div style={{ width: 72, height: 72, borderRadius: 18, background: `${G}10`, border: `1px solid ${G}25`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 36, animation: "float 3s ease-in-out infinite" }}>⚖️</div>
-              </div>
-              <h2 style={{ fontSize: 24, fontWeight: 700, color: "#fff", fontFamily: "'Space Mono', monospace", margin: "0 0 8px", textAlign: "center" }}>Nuova gara in arrivo?</h2>
-              <p style={{ color: MUTED, fontSize: 15, maxWidth: 480, textAlign: "center", lineHeight: 1.6, margin: "0 0 32px" }}>
-                Carica il brief e aggiungi tutte le info che hai. Ti restituisco un punteggio su 100 con la raccomandazione go/no-go.
-              </p>
-
-              <label style={{
-                display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-                width: "100%", maxWidth: 520, padding: "32px 24px",
-                background: uploadedFile ? `${G}08` : CARD,
-                border: `2px dashed ${uploadedFile ? G : BORDER}`,
-                borderRadius: 14, cursor: "pointer", transition: "all 0.25s", marginBottom: 16,
-              }}
-                onMouseEnter={e => { if (!uploadedFile) { e.currentTarget.style.borderColor = G; e.currentTarget.style.background = `${G}05`; } }}
-                onMouseLeave={e => { if (!uploadedFile) { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.background = CARD; } }}
-                onDragOver={e => { e.preventDefault(); e.currentTarget.style.borderColor = G; e.currentTarget.style.background = `${G}08`; }}
-                onDragLeave={e => { if (!uploadedFile) { e.currentTarget.style.borderColor = BORDER; e.currentTarget.style.background = CARD; } }}
-                onDrop={e => { e.preventDefault(); handleFile(e.dataTransfer.files?.[0]); }}
-              >
-                <input type="file" accept=".pdf,.txt,.md,.csv,.doc,.docx,.pptx" style={{ display: "none" }} onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ""; }} />
-                {processingFile ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ width: 20, height: 20, border: `2px solid ${G}40`, borderTopColor: G, borderRadius: "50%", display: "block", animation: "spin 0.6s linear infinite" }} />
-                    <span style={{ color: G, fontSize: 13, fontFamily: "'Space Mono', monospace" }}>Elaborazione in corso...</span>
-                  </div>
-                ) : uploadedFile ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10, width: "100%" }}>
-                    <span style={{ fontSize: 28 }}>📄</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ color: "#fff", fontSize: 14, fontWeight: 600 }}>{uploadedFile.name}</div>
-                      <div style={{ color: MUTED, fontSize: 12 }}>{formatSize(uploadedFile.size)} · Pronto per l'analisi</div>
-                    </div>
-                    <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setUploadedFile(null); }}
-                      style={{ background: "none", border: `1px solid ${BORDER}`, borderRadius: 6, color: MUTED, cursor: "pointer", padding: "4px 8px", fontSize: 11 }}>✕</button>
-                  </div>
-                ) : (
-                  <>
-                    <span style={{ fontSize: 32, marginBottom: 10, opacity: 0.6 }}>📎</span>
-                    <span style={{ color: "#fff", fontSize: 14, fontWeight: 600, marginBottom: 4 }}>Carica il brief della gara</span>
-                    <span style={{ color: MUTED, fontSize: 12 }}>PDF, Word, TXT — oppure trascina qui</span>
-                  </>
-                )}
-              </label>
-
-              <div style={{ width: "100%", maxWidth: 520, marginBottom: 16 }}>
-                <textarea
-                  ref={inputRef}
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Aggiungi contesto: budget, numero agenzie, rimborso spese, relazioni col cliente, info da email o call..."
-                  rows={4}
-                  style={{
-                    width: "100%", background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 10,
-                    color: "#fff", padding: "12px 15px", fontSize: 14, fontFamily: "'DM Sans', sans-serif",
-                    resize: "vertical", outline: "none", transition: "border-color 0.15s", lineHeight: 1.6,
-                  }}
-                  onFocus={e => e.target.style.borderColor = G}
-                  onBlur={e => e.target.style.borderColor = BORDER}
-                />
-              </div>
-
-              <button onClick={send} disabled={loading || (!input.trim() && !uploadedFile)}
-                style={{
-                  padding: "12px 32px", background: G, border: "none", borderRadius: 10,
-                  cursor: loading || (!input.trim() && !uploadedFile) ? "not-allowed" : "pointer",
-                  opacity: loading || (!input.trim() && !uploadedFile) ? 0.3 : 1,
-                  transition: "all 0.2s", fontSize: 14, fontWeight: 700, color: "#000",
-                  fontFamily: "'Space Mono', monospace", display: "flex", alignItems: "center", gap: 8,
-                }}>
-                {loading ? (
-                  <span style={{ width: 16, height: 16, border: "2px solid rgba(0,0,0,0.2)", borderTopColor: "#000", borderRadius: "50%", display: "block", animation: "spin 0.6s linear infinite" }} />
-                ) : (
-                  <>Analizza la gara →</>
-                )}
-              </button>
-
-              <p style={{ color: MUTED, fontSize: 11, marginTop: 16, fontFamily: "'Space Mono', monospace", textAlign: "center" }}>
-                Puoi caricare solo il brief, solo il testo, o entrambi.
-              </p>
-            </div>
-          ) : (
-            <>
-              {messages.map((msg, i) => {
-                const isLastAssistant = msg.role === "assistant" && !messages.slice(i + 1).some(m => m.role === "assistant");
-                const hasScore = msg.role === "assistant" && msg.content && msg.content.includes("PUNTEGGIO:");
-                return (
-                  <div key={i}>
-                    <ChatMessage msg={msg} />
-                    {isLastAssistant && hasScore && !loading && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 14, paddingLeft: 0, marginTop: -4 }}>
-                        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                          <DownloadButton reportText={msg.content} />
-                          <BoardMailButton reportText={msg.content} />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              {loading && <LoadingBubble />}
-              <div ref={chatEndRef} />
-            </>
-          )}
+      <div style={{ flex: 1, overflow: "auto", padding: activeTool === "home" ? 0 : "32px 40px" }}>
+        <div style={{ maxWidth: activeTool === "home" ? "100%" : 800, margin: "0 auto", animation: "fadeIn 0.3s ease" }}>
+          {renderTool()}
         </div>
-
-        {started && (
-          <div style={{ flexShrink: 0, borderTop: `1px solid ${BORDER}`, padding: "10px 0 6px" }}>
-            {uploadedFile && (
-              <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: `${G}08`, border: `1px solid ${G}20`, borderRadius: 7, marginBottom: 8, fontSize: 12 }}>
-                <span>📄</span>
-                <span style={{ color: "#fff", flex: 1 }}>{uploadedFile.name} <span style={{ color: MUTED }}>({formatSize(uploadedFile.size)})</span></span>
-                <button onClick={() => setUploadedFile(null)} style={{ background: "none", border: "none", color: MUTED, cursor: "pointer" }}>✕</button>
-              </div>
-            )}
-            <div style={{ display: "flex", gap: 7, alignItems: "flex-end" }}>
-              <label style={{ cursor: "pointer", padding: "9px 11px", background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 9, display: "flex", alignItems: "center", flexShrink: 0, transition: "border-color 0.15s" }}
-                onMouseEnter={e => e.currentTarget.style.borderColor = G}
-                onMouseLeave={e => e.currentTarget.style.borderColor = BORDER}>
-                <input type="file" accept=".pdf,.txt,.md,.csv,.doc,.docx,.pptx" style={{ display: "none" }} onChange={e => { handleFile(e.target.files?.[0]); e.target.value = ""; }} />
-                {processingFile ? <span style={{ width: 16, height: 16, border: `2px solid ${G}40`, borderTopColor: G, borderRadius: "50%", display: "block", animation: "spin 0.6s linear infinite" }} /> : <span style={{ fontSize: 16 }}>📎</span>}
-              </label>
-              <textarea ref={inputRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
-                placeholder="Rispondi alle domande o aggiungi nuove informazioni..."
-                rows={Math.min(input.split("\n").length, 4) || 1}
-                style={{ flex: 1, background: DARKER, border: `1px solid ${BORDER}`, borderRadius: 9, color: "#fff", padding: "9px 13px", fontSize: 14, fontFamily: "'DM Sans', sans-serif", resize: "none", outline: "none", transition: "border-color 0.15s" }}
-                onFocus={e => e.target.style.borderColor = G} onBlur={e => e.target.style.borderColor = BORDER} />
-              <button onClick={send} disabled={loading || (!input.trim() && !uploadedFile)}
-                style={{ padding: "9px 14px", background: G, border: "none", borderRadius: 9, cursor: loading || (!input.trim() && !uploadedFile) ? "not-allowed" : "pointer", opacity: loading || (!input.trim() && !uploadedFile) ? 0.25 : 1, transition: "opacity 0.15s", display: "flex", alignItems: "center", flexShrink: 0 }}>
-                {loading ? <span style={{ width: 16, height: 16, border: "2px solid rgba(0,0,0,0.2)", borderTopColor: "#000", borderRadius: "50%", display: "block", animation: "spin 0.6s linear infinite" }} /> : <span style={{ fontSize: 16, color: "#000", fontWeight: 700 }}>↑</span>}
-              </button>
-            </div>
-            <div style={{ textAlign: "center", marginTop: 4 }}>
-              <span style={{ color: MUTED, fontSize: 9, fontFamily: "'Space Mono', monospace" }}>Shift+Enter per andare a capo · Enter per inviare</span>
-            </div>
-          </div>
-        )}
-      </div>
-
-      <div style={{ textAlign: "center", padding: "6px 0", flexShrink: 0 }}>
-        <span style={{ color: MUTED, fontSize: 9, fontFamily: "'Space Mono', monospace" }}>SBAM — Part of JAKALA · Powered by Claude AI · 2026</span>
       </div>
     </div>
   );
