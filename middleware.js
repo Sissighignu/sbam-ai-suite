@@ -1,23 +1,22 @@
 import { NextResponse } from 'next/server'
 
+const PUBLIC_PATHS = ['/login', '/api/login']
+
 export function middleware(request) {
   const { pathname } = request.nextUrl
 
-  if (pathname.startsWith('/login') || pathname.startsWith('/api/login')) {
-    return NextResponse.next()
-  }
+  // Lascia passare percorsi pubblici
+  const isPublic = PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
+  if (isPublic) return NextResponse.next()
 
+  // Controlla cookie
   const session = request.cookies.get('sbam_session')
+  if (session?.value === 'authenticated') return NextResponse.next()
 
-  if (session?.value === 'authenticated') {
-    return NextResponse.next()
-  }
-
-  const loginUrl = new URL('/login', request.url)
-  loginUrl.searchParams.set('from', pathname)
-  return NextResponse.redirect(loginUrl)
+  // Redirect al login
+  return NextResponse.redirect(new URL('/login', request.url))
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!_next/static|_next/image|favicon\\.ico).*)'],
 }
