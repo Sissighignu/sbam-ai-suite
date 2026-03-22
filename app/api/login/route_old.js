@@ -7,24 +7,13 @@ export async function POST(request) {
   const validPassword = process.env.INTERNAL_PASSWORD
   const sessionToken = process.env.SESSION_TOKEN
 
-  // DEBUG — rimuovere dopo il test
-  console.log('--- LOGIN DEBUG ---')
-  console.log('Ricevuto username:', JSON.stringify(username))
-  console.log('Ricevuto password:', JSON.stringify(password))
-  console.log('ENV INTERNAL_USER:', JSON.stringify(validUser))
-  console.log('ENV INTERNAL_PASSWORD:', JSON.stringify(validPassword))
-  console.log('ENV SESSION_TOKEN:', JSON.stringify(sessionToken))
-  console.log('Match user:', username === validUser)
-  console.log('Match password:', password === validPassword)
-  console.log('-------------------')
-
   if (username === validUser && password === validPassword) {
     const response = NextResponse.json({ success: true })
     response.cookies.set('sbam_session', sessionToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7,
+      maxAge: 60 * 60 * 24 * 7, // 7 giorni
       path: '/',
     })
     return response
