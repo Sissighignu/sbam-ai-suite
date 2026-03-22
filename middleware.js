@@ -1,25 +1,23 @@
 import { NextResponse } from 'next/server'
 
 export function middleware(request) {
-  const basicAuth = request.headers.get('authorization')
+  const { pathname } = request.nextUrl
 
-  if (basicAuth) {
-    const auth = basicAuth.split(' ')[1]
-    const [user, pwd] = atob(auth).split(':')
-    if (
-      user === process.env.INTERNAL_USER &&
-      pwd === process.env.INTERNAL_PASSWORD
-    ) {
-      return NextResponse.next()
-    }
+  // Lascia passare sempre la pagina di login e la sua API
+  if (pathname.startsWith('/login') || pathname.startsWith('/api/login')) {
+    return NextResponse.next()
   }
 
-  return new NextResponse('Accesso riservato — SBAM Internal Tool', {
-    status: 401,
-    headers: {
-      'WWW-Authenticate': 'Basic realm="SBAM.ai – Accesso riservato"',
-    },
-  })
+  // Controlla il cookie di sessione
+  const session = request.cookies.get('sbam_session')
+  if (session?.value === process.env.SESSION_TOKEN) {
+    return NextResponse.next()
+  }
+
+  // Reindirizza al login
+  const loginUrl = new URL('/login', request.url)
+  loginUrl.searchParams.set('from', pathname)
+  return NextResponse.redirect(loginUrl)
 }
 
 export const config = {
