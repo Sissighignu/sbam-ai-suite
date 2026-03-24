@@ -7,9 +7,17 @@ const client = new Anthropic({
 
 export async function POST(request) {
   try {
-    const { system, message } = await request.json();
+    const body = await request.json();
+    const { system, messages, message } = body;
 
-    if (!message || !system) {
+    // Support both array (messages) and single string (message) formats
+    const resolvedMessages = messages
+      ? messages
+      : message
+      ? [{ role: "user", content: message }]
+      : null;
+
+    if (!resolvedMessages || !system) {
       return NextResponse.json(
         { error: "Missing system or message" },
         { status: 400 }
@@ -20,7 +28,7 @@ export async function POST(request) {
       model: "claude-sonnet-4-20250514",
       max_tokens: 4000,
       system: system,
-      messages: [{ role: "user", content: message }],
+      messages: resolvedMessages,
     });
 
     const text = response.content
